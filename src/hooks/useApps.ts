@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppInfo } from "../types/app";
+import type { AppInfo, FolderInfo, AppsResponse } from "../types/app";
 
 interface UseAppsResult {
   apps: AppInfo[];
+  folders: FolderInfo[];
   loading: boolean;
   loadingMessage: string;
   error: string | null;
@@ -12,18 +13,27 @@ interface UseAppsResult {
 
 export function useApps(): UseAppsResult {
   const [apps, setApps] = useState<AppInfo[]>([]);
+  const [folders, setFolders] = useState<FolderInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState("Loading...");
   const [error, setError] = useState<string | null>(null);
 
-  // Load icon for a single app and update state
+  // Load icon for a single app and update state (both top-level and in folders)
   const loadIcon = useCallback(async (appPath: string) => {
     try {
       const icon = await invoke<string | null>("get_app_icon", { path: appPath });
       if (icon) {
+        // Update top-level apps
         setApps(prev => prev.map(app =>
           app.path === appPath ? { ...app, icon } : app
         ));
+        // Update apps in folders
+        setFolders(prev => prev.map(folder => ({
+          ...folder,
+          apps: folder.apps.map(app =>
+            app.path === appPath ? { ...app, icon } : app
+          )
+        })));
       }
     } catch (e) {
       console.error(`Failed to load icon for ${appPath}:`, e);
@@ -36,12 +46,19 @@ export function useApps(): UseAppsResult {
     setLoadingMessage("Loading applications...");
 
     try {
-      const result = await invoke<AppInfo[]>("get_apps");
-      setApps(result);
+      const result = await invoke<AppsResponse>("get_apps");
+      setApps(result.apps);
+      setFolders(result.folders);
       setLoading(false);
 
+      // Collect all apps that need icons (top-level + folder apps)
+      const allApps = [
+        ...result.apps,
+        ...result.folders.flatMap(folder => folder.apps)
+      ];
+      const appsWithoutIcons = allApps.filter(app => !app.icon);
+
       // Load missing icons progressively in background
-      const appsWithoutIcons = result.filter(app => !app.icon);
       for (const app of appsWithoutIcons) {
         loadIcon(app.path);
       }
@@ -56,5 +73,5 @@ export function useApps(): UseAppsResult {
     fetchApps();
   }, [fetchApps]);
 
-  return { apps, loading, loadingMessage, error, refetch: fetchApps };
+  return { apps, folders, loading, loadingMessage, error, refetch: fetchApps };
 }

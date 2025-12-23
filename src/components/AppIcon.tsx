@@ -33,7 +33,7 @@ function getIconSrc(icon: string | null): string {
 export const AppIcon = forwardRef<HTMLButtonElement, AppIconProps>(
   ({ app, onLaunch, isLaunching }, ref) => {
     const baseClasses =
-      "flex flex-col items-center gap-2 p-3 bg-transparent border-none rounded-xl cursor-default w-24 pointer-events-none transition-all duration-100 ease-out active:scale-95";
+      "flex flex-col items-center gap-0.5 p-3 bg-transparent border-none rounded-xl cursor-default w-36 pointer-events-none transition-all duration-100 ease-out active:scale-95";
 
     const launchingClasses = isLaunching ? "scale-125 duration-150" : "";
 
@@ -53,7 +53,7 @@ export const AppIcon = forwardRef<HTMLButtonElement, AppIconProps>(
             draggable={false}
           />
         </div>
-        <span className="text-xs text-white text-center max-w-full truncate drop-shadow-md pointer-events-auto cursor-pointer">
+        <span className="text-[0.6875rem] text-white text-center line-clamp-2 drop-shadow-md">
           {app.name}
         </span>
       </button>

@@ -21,16 +21,58 @@ pub struct AppInfo {
     pub icon: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FolderInfo {
+    pub name: String,
+    pub path: String,
+    pub apps: Vec<AppInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppsResponse {
+    pub apps: Vec<AppInfo>,
+    pub folders: Vec<FolderInfo>,
+}
+
 fn get_applications_dirs() -> Vec<PathBuf> {
-    let mut dirs = vec![PathBuf::from("/Applications")];
+    let mut dirs = vec![
+        PathBuf::from("/Applications"),
+        PathBuf::from("/System/Applications"),
+    ];
     if let Some(home) = dirs::home_dir() {
         dirs.push(home.join("Applications"));
     }
     dirs
 }
 
-fn discover_apps() -> Vec<PathBuf> {
+fn get_apps_in_dir(dir: &PathBuf) -> Vec<PathBuf> {
     let mut apps = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map_or(false, |ext| ext == "app") {
+                apps.push(path);
+            }
+        }
+    }
+    apps.sort_by(|a, b| {
+        a.file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase()
+            .cmp(
+                &b.file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_lowercase(),
+            )
+    });
+    apps
+}
+
+fn discover_apps_and_folders() -> (Vec<PathBuf>, Vec<(PathBuf, Vec<PathBuf>)>) {
+    let mut apps = Vec::new();
+    let mut folders: Vec<(PathBuf, Vec<PathBuf>)> = Vec::new();
 
     for dir in get_applications_dirs() {
         if let Ok(entries) = fs::read_dir(&dir) {
@@ -38,6 +80,16 @@ fn discover_apps() -> Vec<PathBuf> {
                 let path = entry.path();
                 if path.extension().map_or(false, |ext| ext == "app") {
                     apps.push(path);
+                } else if path.is_dir() {
+                    // Check for apps in subdirectory (1 level deep)
+                    let sub_apps = get_apps_in_dir(&path);
+                    if sub_apps.len() >= 2 {
+                        // Only create folder if 2+ apps
+                        folders.push((path, sub_apps));
+                    } else if sub_apps.len() == 1 {
+                        // Single app goes to main list
+                        apps.extend(sub_apps);
+                    }
                 }
             }
         }
@@ -56,7 +108,20 @@ fn discover_apps() -> Vec<PathBuf> {
             )
     });
 
-    apps
+    folders.sort_by(|a, b| {
+        a.0.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase()
+            .cmp(
+                &b.0.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_lowercase(),
+            )
+    });
+
+    (apps, folders)
 }
 
 /// Get icons cache directory
@@ -156,10 +221,10 @@ async fn get_app_icon(path: String) -> Option<String> {
     None
 }
 
-/// Get all apps - returns instantly with cached icons (null for uncached)
+/// Get all apps and folders - returns instantly with cached icons (null for uncached)
 #[tauri::command]
-async fn get_apps() -> Result<Vec<AppInfo>, String> {
-    let app_paths = discover_apps();
+async fn get_apps() -> Result<AppsResponse, String> {
+    let (app_paths, folder_data) = discover_apps_and_folders();
 
     let mut apps: Vec<AppInfo> = app_paths
         .into_iter()
@@ -178,7 +243,36 @@ async fn get_apps() -> Result<Vec<AppInfo>, String> {
 
     apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
-    Ok(apps)
+    let folders: Vec<FolderInfo> = folder_data
+        .into_iter()
+        .filter_map(|(folder_path, sub_app_paths)| {
+            let name = folder_path.file_name()?.to_string_lossy().to_string();
+            let path_str = folder_path.to_string_lossy().to_string();
+
+            let folder_apps: Vec<AppInfo> = sub_app_paths
+                .into_iter()
+                .filter_map(|app_path| {
+                    let app_name = app_path.file_stem()?.to_string_lossy().to_string();
+                    let app_path_str = app_path.to_string_lossy().to_string();
+                    let icon = get_icon_if_cached(&app_path_str);
+
+                    Some(AppInfo {
+                        name: app_name,
+                        path: app_path_str,
+                        icon,
+                    })
+                })
+                .collect();
+
+            Some(FolderInfo {
+                name,
+                path: path_str,
+                apps: folder_apps,
+            })
+        })
+        .collect();
+
+    Ok(AppsResponse { apps, folders })
 }
 
 #[tauri::command]
