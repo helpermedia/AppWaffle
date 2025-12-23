@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+}
+
+@layer base {
+  html,
+  body {
+    @apply m-0 p-0 overflow-hidden;
+    background: transparent !important;
+  }
+
+  #root {
+    @apply w-screen h-screen bg-transparent;
+  }
+
+  * {
+    @apply box-border;
+  }
+
+  body {
+    @apply font-sans antialiased select-none;
+  }
+}
