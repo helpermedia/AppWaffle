@@ -69,7 +69,7 @@ export function AppGrid({ apps, onLaunch, launchingPath }: AppGridProps) {
       {apps.map((app, index) => (
         <AppIcon
           key={app.path}
-          ref={(el) => (buttonRefs.current[index] = el)}
+          ref={(el) => { buttonRefs.current[index] = el; }}
           app={app}
           onLaunch={onLaunch}
           isLaunching={app.path === launchingPath}
