@@ -1,6 +1,20 @@
-import { useEffect, useRef } from "react";
-import type { FolderInfo } from "../types/app";
+import { useEffect, useRef, useState, useMemo } from "react";
+import {
+  DndContext,
+  DragEndEvent,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import type { AppInfo, FolderInfo } from "../types/app";
 import { AppIcon } from "./AppIcon";
+import { SortableItem } from "./SortableItem";
 
 interface FolderModalProps {
   folder: FolderInfo;
@@ -12,6 +26,34 @@ interface FolderModalProps {
 export function FolderModal({ folder, onClose, onLaunch, launchingPath }: FolderModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Track apps in local state for reordering
+  const [apps, setApps] = useState<AppInfo[]>(folder.apps);
+
+  // Get item IDs for SortableContext
+  const itemIds = useMemo(() => apps.map((app) => app.path), [apps]);
+
+  // Sensor for pointer/mouse
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    })
+  );
+
+  // Handle drag end - reorder apps
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setApps((prevApps) => {
+        const oldIndex = prevApps.findIndex((app) => app.path === active.id);
+        const newIndex = prevApps.findIndex((app) => app.path === over.id);
+        return arrayMove(prevApps, oldIndex, newIndex);
+      });
+    }
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -28,7 +70,7 @@ export function FolderModal({ folder, onClose, onLaunch, launchingPath }: Folder
       switch (e.key) {
         case "ArrowRight":
           e.preventDefault();
-          newIndex = currentIndex < 0 ? 0 : Math.min(currentIndex + 1, folder.apps.length - 1);
+          newIndex = currentIndex < 0 ? 0 : Math.min(currentIndex + 1, apps.length - 1);
           break;
         case "ArrowLeft":
           e.preventDefault();
@@ -36,7 +78,7 @@ export function FolderModal({ folder, onClose, onLaunch, launchingPath }: Folder
           break;
         case "ArrowDown":
           e.preventDefault();
-          newIndex = currentIndex < 0 ? 0 : Math.min(currentIndex + cols, folder.apps.length - 1);
+          newIndex = currentIndex < 0 ? 0 : Math.min(currentIndex + cols, apps.length - 1);
           break;
         case "ArrowUp":
           e.preventDefault();
@@ -51,7 +93,7 @@ export function FolderModal({ folder, onClose, onLaunch, launchingPath }: Folder
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [folder.apps.length, onClose]);
+  }, [apps.length, onClose]);
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -72,17 +114,27 @@ export function FolderModal({ folder, onClose, onLaunch, launchingPath }: Folder
         <h2 className="text-white text-xl font-medium text-center mb-4 drop-shadow-md">
           {folder.name}
         </h2>
-        <div className="grid grid-cols-4 gap-2">
-          {folder.apps.map((app, index) => (
-            <AppIcon
-              key={app.path}
-              ref={(el) => { buttonRefs.current[index] = el; }}
-              app={app}
-              onLaunch={onLaunch}
-              isLaunching={app.path === launchingPath}
-            />
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext items={itemIds} strategy={rectSortingStrategy}>
+            <div className="grid grid-cols-4 gap-2">
+              {apps.map((app, index) => (
+                <SortableItem key={app.path} id={app.path}>
+                  <AppIcon
+                    ref={(el) => { buttonRefs.current[index] = el; }}
+                    app={app}
+                    index={index}
+                    onLaunch={onLaunch}
+                    isLaunching={app.path === launchingPath}
+                  />
+                </SortableItem>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       </div>
     </div>
   );

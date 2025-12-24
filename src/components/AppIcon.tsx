@@ -1,47 +1,23 @@
 import { forwardRef } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import type { AppInfo } from "../types/app";
+import { getIconSrc, ICON_BUTTON_CLASSES } from "../utils/iconUtils";
 
 interface AppIconProps {
   app: AppInfo;
+  index: number;
   onLaunch: (path: string) => void;
   isLaunching: boolean;
 }
 
-// Subtle animated placeholder matching Tahoe's icon background gray
-const DEFAULT_ICON = `data:image/svg+xml,${encodeURIComponent(`
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-    <style>
-      @keyframes pulse { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
-      rect { animation: pulse 2s ease-in-out infinite; }
-    </style>
-    <rect width="100" height="100" rx="22" fill="#bbb"/>
-  </svg>
-`)}`;
-
-function getIconSrc(icon: string | null): string {
-  if (!icon) return DEFAULT_ICON;
-
-  if (icon.startsWith("file://")) {
-    const filePath = icon.replace("file://", "");
-    return convertFileSrc(filePath);
-  }
-
-  return icon;
-}
-
 export const AppIcon = forwardRef<HTMLButtonElement, AppIconProps>(
-  ({ app, onLaunch, isLaunching }, ref) => {
-    const baseClasses =
-      "flex flex-col items-center gap-0.5 p-3 bg-transparent border-none rounded-xl cursor-default w-36 pointer-events-none transition-all duration-100 ease-out active:scale-95";
-
+  ({ app, index, onLaunch, isLaunching }, ref) => {
     const launchingClasses = isLaunching ? "scale-125 duration-150" : "";
 
     return (
       <button
         ref={ref}
         data-app-icon
-        className={`${baseClasses} ${launchingClasses}`}
+        className={`${ICON_BUTTON_CLASSES} ${launchingClasses}`}
         onClick={() => onLaunch(app.path)}
         title={app.name}
       >
@@ -53,10 +29,12 @@ export const AppIcon = forwardRef<HTMLButtonElement, AppIconProps>(
             draggable={false}
           />
         </div>
-        <span className="text-[0.6875rem] text-white text-center line-clamp-2 drop-shadow-md">
-          {app.name}
+        <span className="text-[0.6875rem] text-white text-center line-clamp-2 drop-shadow-md h-8 leading-4">
+          {index}. {app.name}
         </span>
       </button>
     );
   }
 );
+
+AppIcon.displayName = "AppIcon";

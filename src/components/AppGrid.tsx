@@ -1,7 +1,21 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  DndContext,
+  DragEndEvent,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
 import type { AppInfo, FolderInfo } from "../types/app";
 import { AppIcon } from "./AppIcon";
 import { FolderIcon } from "./FolderIcon";
+import { SortableItem } from "./SortableItem";
 
 type GridItem =
   | { type: "app"; data: AppInfo }
@@ -19,8 +33,8 @@ export function AppGrid({ apps, folders, onLaunch, onOpenFolder, launchingPath }
   const gridRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  // Combine apps and folders into a single sorted list
-  const items = useMemo<GridItem[]>(() => {
+  // Create sorted items from props
+  const sortedItems = useMemo<GridItem[]>(() => {
     const appItems: GridItem[] = apps.map((app) => ({ type: "app", data: app }));
     const folderItems: GridItem[] = folders.map((folder) => ({ type: "folder", data: folder }));
     return [...appItems, ...folderItems].sort((a, b) =>
@@ -28,6 +42,34 @@ export function AppGrid({ apps, folders, onLaunch, onOpenFolder, launchingPath }
     );
   }, [apps, folders]);
 
+  // Track custom order after user reorders (null = use sortedItems)
+  const [customOrder, setCustomOrder] = useState<GridItem[] | null>(null);
+  const items = customOrder ?? sortedItems;
+
+  // Get item IDs for SortableContext
+  const itemIds = useMemo(() => items.map((item) => item.data.path), [items]);
+
+  // Sensor for pointer/mouse
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    })
+  );
+
+  // Handle drag end - reorder items
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = items.findIndex((item) => item.data.path === active.id);
+      const newIndex = items.findIndex((item) => item.data.path === over.id);
+      setCustomOrder(arrayMove(items, oldIndex, newIndex));
+    }
+  };
+
+  // Keyboard navigation
   const getColumns = () => {
     if (!gridRef.current) return 8;
     const width = gridRef.current.offsetWidth;
@@ -78,27 +120,42 @@ export function AppGrid({ apps, folders, onLaunch, onOpenFolder, launchingPath }
   }, [items]);
 
   return (
-    <div
-      ref={gridRef}
-      className="grid grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-4 p-10 max-w-275 mx-auto justify-items-center pointer-events-none *:pointer-events-auto"
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
     >
-      {items.map((item, index) =>
-        item.type === "app" ? (
-          <AppIcon
-            key={item.data.path}
-            ref={(el) => { buttonRefs.current[index] = el; }}
-            app={item.data}
-            onLaunch={onLaunch}
-            isLaunching={item.data.path === launchingPath}
-          />
-        ) : (
-          <FolderIcon
-            key={item.data.path}
-            folder={item.data}
-            onOpen={onOpenFolder}
-          />
-        )
-      )}
-    </div>
+      <SortableContext items={itemIds} strategy={rectSortingStrategy}>
+        <div
+          ref={gridRef}
+          className="grid grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-4 p-10 max-w-275 mx-auto justify-items-center pointer-events-auto"
+        >
+          {items.map((item, index) => {
+            const itemId = item.data.path;
+
+            return (
+              <SortableItem key={itemId} id={itemId}>
+                {item.type === "app" ? (
+                  <AppIcon
+                    ref={(el) => { buttonRefs.current[index] = el; }}
+                    app={item.data}
+                    index={index}
+                    onLaunch={onLaunch}
+                    isLaunching={item.data.path === launchingPath}
+                  />
+                ) : (
+                  <FolderIcon
+                    ref={(el) => { buttonRefs.current[index] = el; }}
+                    folder={item.data}
+                    index={index}
+                    onOpen={onOpenFolder}
+                  />
+                )}
+              </SortableItem>
+            );
+          })}
+        </div>
+      </SortableContext>
+    </DndContext>
   );
 }
