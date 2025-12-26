@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check:*)",
+      "Bash(bun lint:*)",
+      "Bash(bun run build:*)",
+      "Bash(bun tauri build:*)",
+      "Bash(bun add:*)",
+      "WebFetch(domain:codesandbox.io)"
+    ]
+  }
+}

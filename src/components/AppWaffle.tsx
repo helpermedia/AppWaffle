@@ -1,129 +1,186 @@
-import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { exit } from "@tauri-apps/plugin-process";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useState, useMemo } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useApps } from "../hooks/useApps";
-import { AppGrid } from "./AppGrid";
-import { FolderModal } from "./FolderModal";
-import type { FolderInfo } from "../types/app";
+import { getIconSrc } from "../utils/iconUtils";
+import type { AppInfo } from "../types/app";
 
-const baseClasses =
-  "fixed inset-0 flex items-start justify-center pt-20 overflow-y-auto bg-black/[0.001] cursor-default transition-all duration-400 ease-out";
+type GridItem = AppInfo & { id: string };
+
+function SortableAppItem({
+  item,
+  isDragActive,
+}: {
+  item: GridItem;
+  isDragActive: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({
+      id: item.id,
+      transition: {
+        duration: 200,
+        easing: "ease",
+      },
+    });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`w-20 h-24 p-2 rounded-xl cursor-grab active:cursor-grabbing flex flex-col items-center justify-center ${
+        isDragging
+          ? "opacity-0"
+          : isDragActive
+            ? "transition-transform duration-200"
+            : "hover:bg-white/10 transition-all"
+      }`}
+    >
+      <img
+        src={getIconSrc(item.icon)}
+        alt={item.name}
+        className="w-16 h-16 rounded-xl shadow-lg"
+        draggable={false}
+      />
+      <span className="text-xs text-white mt-1 truncate w-full text-center">
+        {item.name}
+      </span>
+    </div>
+  );
+}
+
+function AppItemOverlay({ item }: { item: GridItem }) {
+  return (
+    <div className="w-20 h-24 p-2 rounded-xl flex flex-col items-center justify-center cursor-grabbing">
+      <img
+        src={getIconSrc(item.icon)}
+        alt={item.name}
+        className="w-16 h-16 rounded-xl shadow-2xl shadow-black/50"
+        draggable={false}
+      />
+      <span className="text-xs text-white mt-1 truncate w-full text-center">
+        {item.name}
+      </span>
+    </div>
+  );
+}
 
 export function AppWaffle() {
-  const { apps, folders, loading, loadingMessage, error } = useApps();
-  const isClosingRef = useRef(false);
-  const [isClosing, setIsClosing] = useState(false);
-  const [launchingPath, setLaunchingPath] = useState<string | null>(null);
-  const [openFolder, setOpenFolder] = useState<FolderInfo | null>(null);
+  const { apps, loading, loadingMessage, error } = useApps();
+  const [order, setOrder] = useState<string[] | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
-  const closeWithAnimation = async () => {
-    if (isClosingRef.current) return;
-    isClosingRef.current = true;
-    setIsClosing(true);
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    await exit(0);
-  };
+  // Initialize order once apps load
+  if (order === null && apps.length > 0) {
+    setOrder(apps.map((app) => app.path));
+  }
 
-  useEffect(() => {
-    const handleKeyDown = async (e: KeyboardEvent) => {
-      // Don't close app when folder modal is open - let it handle Escape
-      if (e.key === "Escape" && !openFolder) {
-        await closeWithAnimation();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [openFolder]);
+  // Derive items from order + apps (icons update automatically)
+  const items = useMemo(() => {
+    if (!order) return [];
+    const appsMap = new Map(apps.map((app) => [app.path, app]));
+    return order
+      .map((id) => {
+        const app = appsMap.get(id);
+        return app ? { ...app, id } : null;
+      })
+      .filter((item): item is GridItem => item !== null);
+  }, [order, apps]);
 
-  useEffect(() => {
-    const handleMouseDown = async (e: MouseEvent) => {
-      // Don't close when clicking inside folder modal or app icons
-      const target = e.target as HTMLElement;
-      if (!target.closest("[data-app-icon]")) {
-        if (openFolder) {
-          setOpenFolder(null);
-        } else {
-          await closeWithAnimation();
-        }
-      }
-    };
-    document.addEventListener("mousedown", handleMouseDown);
-    return () => document.removeEventListener("mousedown", handleMouseDown);
-  }, [openFolder]);
+  const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
 
-  // Close when window loses focus (e.g., clicking dock or switching apps)
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-      if (!focused) {
-        closeWithAnimation();
-      }
-    }).then((fn) => { unlisten = fn; });
-    return () => unlisten?.();
-  }, []);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
-  const handleLaunch = async (path: string) => {
-    if (isClosingRef.current) return;
-    isClosingRef.current = true;
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(String(event.active.id));
+  }
 
-    try {
-      invoke("launch_app", { path });
-      setLaunchingPath(path);
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      setIsClosing(true);
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      await exit(0);
-    } catch (e) {
-      console.error("Failed to launch app:", e);
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (over && active.id !== over.id) {
+      setOrder((prev) => {
+        if (!prev) return prev;
+        const oldIndex = prev.indexOf(String(active.id));
+        const newIndex = prev.indexOf(String(over.id));
+        return arrayMove(prev, oldIndex, newIndex);
+      });
     }
-  };
-
-  const handleOpenFolder = (folder: FolderInfo) => {
-    setOpenFolder(folder);
-  };
-
-  const handleCloseFolder = () => {
-    setOpenFolder(null);
-  };
-
-  const containerClasses = `${baseClasses} ${isClosing ? "opacity-0 scale-95" : "opacity-100 scale-100"}`;
+  }
 
   if (loading) {
     return (
-      <div className={containerClasses}>
-        <p className="text-white text-lg drop-shadow-md p-5">{loadingMessage}</p>
+      <div className="w-full h-full flex items-center justify-center">
+        <p className="text-white/70">{loadingMessage}</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className={containerClasses}>
-        <p className="text-red-400 text-lg drop-shadow-md p-5">Error: {error}</p>
+      <div className="w-full h-full flex items-center justify-center">
+        <p className="text-red-400">Error: {error}</p>
       </div>
     );
   }
 
   return (
-    <>
-      <div className={containerClasses}>
-        <AppGrid
-          apps={apps}
-          folders={folders}
-          onLaunch={handleLaunch}
-          onOpenFolder={handleOpenFolder}
-          launchingPath={launchingPath}
-        />
-      </div>
-      {openFolder && (
-        <FolderModal
-          folder={openFolder}
-          onClose={handleCloseFolder}
-          onLaunch={handleLaunch}
-          launchingPath={launchingPath}
-        />
-      )}
-    </>
+    <div className="w-full h-full p-4 overflow-auto">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={items} strategy={rectSortingStrategy}>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {items.map((item) => (
+              <SortableAppItem
+                key={item.id}
+                item={item}
+                isDragActive={activeItem !== null}
+              />
+            ))}
+          </div>
+        </SortableContext>
+
+        <DragOverlay>
+          {activeItem && <AppItemOverlay item={activeItem} />}
+        </DragOverlay>
+      </DndContext>
+    </div>
   );
 }

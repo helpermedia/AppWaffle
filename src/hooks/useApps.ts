@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppInfo, FolderInfo, AppsResponse } from "../types/app";
 
@@ -19,7 +19,7 @@ export function useApps(): UseAppsResult {
   const [error, setError] = useState<string | null>(null);
 
   // Load icon for a single app and update state (both top-level and in folders)
-  const loadIcon = useCallback(async (appPath: string) => {
+  async function loadIcon(appPath: string) {
     try {
       const icon = await invoke<string | null>("get_app_icon", { path: appPath });
       if (icon) {
@@ -38,9 +38,9 @@ export function useApps(): UseAppsResult {
     } catch (e) {
       console.error(`Failed to load icon for ${appPath}:`, e);
     }
-  }, []);
+  }
 
-  const fetchApps = useCallback(async () => {
+  async function fetchApps() {
     setLoading(true);
     setError(null);
     setLoadingMessage("Loading applications...");
@@ -66,12 +66,12 @@ export function useApps(): UseAppsResult {
       setError(e instanceof Error ? e.message : String(e));
       setLoading(false);
     }
-  }, [loadIcon]);
+  }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial data fetch on mount is valid
     fetchApps();
-  }, [fetchApps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Run once on mount
+  }, []);
 
   return { apps, folders, loading, loadingMessage, error, refetch: fetchApps };
 }

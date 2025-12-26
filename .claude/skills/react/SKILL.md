@@ -1,0 +1,404 @@
+---
+name: react
+description: React 19 best practices, patterns, and guidance. Use when writing components, hooks, managing state, handling async operations, or reviewing React code.
+---
+
+# React 19 Best Practices
+
+## When to Apply
+
+Use this skill when:
+- Writing or refactoring React components
+- Creating custom hooks
+- Implementing async operations or form handling
+- Reviewing React code for optimization
+- Deciding between hooks or patterns
+
+---
+
+## Core Principles
+
+### 1. Automatic Memoization (React Compiler)
+
+The React Compiler handles memoization automatically.
+
+**Do:**
+- Trust the compiler to optimize renders
+- Only add manual memoization after profiling shows a need
+
+**Don't:**
+- Wrap everything in `React.memo`
+- Add `useMemo`/`useCallback` by default
+
+```tsx
+// Before (React 18 habit)
+const MemoizedComponent = React.memo(({ data }) => <div>{data}</div>);
+const memoizedValue = useMemo(() => compute(data), [data]);
+const memoizedFn = useCallback(() => doSomething(), []);
+
+// After (React 19) — just write it simply
+function Component({ data }) {
+  const value = compute(data);
+  const handleClick = () => doSomething();
+  return <div onClick={handleClick}>{value}</div>;
+}
+```
+
+---
+
+## New Hooks
+
+### `use()` — Read Promises/Context in Render
+
+Unlike `useContext`, works with conditionals and loops.
+
+```tsx
+import { use } from 'react';
+
+function Comments({ commentsPromise }) {
+  // Can be inside conditions!
+  if (!commentsPromise) return null;
+
+  const comments = use(commentsPromise);
+  return comments.map(c => <p key={c.id}>{c.text}</p>);
+}
+
+// With Suspense
+<Suspense fallback={<Loading />}>
+  <Comments commentsPromise={fetchComments()} />
+</Suspense>
+```
+
+### `useOptimistic()` — Optimistic UI Updates
+
+Show immediate feedback before server confirms.
+
+```tsx
+import { useOptimistic } from 'react';
+
+function TodoList({ todos, addTodo }) {
+  const [optimisticTodos, addOptimistic] = useOptimistic(
+    todos,
+    (state, newTodo) => [...state, { ...newTodo, pending: true }]
+  );
+
+  async function handleAdd(formData) {
+    const newTodo = { id: Date.now(), text: formData.get('text') };
+    addOptimistic(newTodo);      // Instant UI update
+    await addTodo(newTodo);       // Server request
+  }
+
+  return (
+    <form action={handleAdd}>
+      <input name="text" />
+      <ul>
+        {optimisticTodos.map(todo => (
+          <li key={todo.id} style={{ opacity: todo.pending ? 0.5 : 1 }}>
+            {todo.text}
+          </li>
+        ))}
+      </ul>
+    </form>
+  );
+}
+```
+
+### `useActionState()` — Track Async Action Status
+
+Replaces manual `isPending`, `error`, `data` state.
+
+```tsx
+import { useActionState } from 'react';
+
+function SaveButton() {
+  const [error, submitAction, isPending] = useActionState(
+    async (previousState, formData) => {
+      const result = await saveData(formData);
+      if (result.error) return result.error;
+      return null;
+    },
+    null
+  );
+
+  return (
+    <form action={submitAction}>
+      <input name="title" />
+      <button disabled={isPending}>
+        {isPending ? 'Saving...' : 'Save'}
+      </button>
+      {error && <p className="text-red-500">{error}</p>}
+    </form>
+  );
+}
+```
+
+### `useFormStatus()` — Read Parent Form Status
+
+No prop drilling needed for submit button state.
+
+```tsx
+import { useFormStatus } from 'react-dom';
+
+function SubmitButton() {
+  const { pending, data, method } = useFormStatus();
+  return (
+    <button disabled={pending}>
+      {pending ? 'Submitting...' : 'Submit'}
+    </button>
+  );
+}
+
+// Use in any form — no props needed
+<form action={serverAction}>
+  <input name="email" />
+  <SubmitButton />
+</form>
+```
+
+---
+
+## Actions Pattern
+
+### With `useTransition`
+
+For non-blocking async updates:
+
+```tsx
+import { useTransition } from 'react';
+
+function SearchResults() {
+  const [query, setQuery] = useState('');
+  const [isPending, startTransition] = useTransition();
+
+  function handleSearch(e) {
+    const value = e.target.value;
+    setQuery(value);  // Urgent: update input immediately
+
+    startTransition(async () => {
+      await updateResults(value);  // Non-urgent: can be interrupted
+    });
+  }
+
+  return (
+    <>
+      <input onChange={handleSearch} />
+      {isPending && <Spinner />}
+      <Results query={query} />
+    </>
+  );
+}
+```
+
+### Form Actions
+
+Pass async functions directly to forms:
+
+```tsx
+async function createPost(formData) {
+  'use server';  // For Server Actions
+  await db.posts.create({ title: formData.get('title') });
+}
+
+<form action={createPost}>
+  <input name="title" />
+  <button type="submit">Create</button>
+</form>
+```
+
+---
+
+## Simplified Patterns
+
+### Refs as Props (No `forwardRef`)
+
+```tsx
+// Before (React 18)
+const Input = forwardRef((props, ref) => (
+  <input ref={ref} {...props} />
+));
+
+// After (React 19) — ref is just a prop
+function Input({ ref, ...props }) {
+  return <input ref={ref} {...props} />;
+}
+
+// Usage
+<Input ref={myRef} placeholder="Type here" />
+```
+
+### Context as Provider
+
+```tsx
+// Before
+<ThemeContext.Provider value="dark">
+  {children}
+</ThemeContext.Provider>
+
+// After (React 19)
+<ThemeContext value="dark">
+  {children}
+</ThemeContext>
+```
+
+### Ref Cleanup Functions
+
+```tsx
+<div ref={(node) => {
+  // Setup
+  node.addEventListener('scroll', handleScroll);
+
+  // Cleanup (return a function)
+  return () => {
+    node.removeEventListener('scroll', handleScroll);
+  };
+}} />
+```
+
+### `useDeferredValue` with Initial Value
+
+```tsx
+const deferredQuery = useDeferredValue(query, '');  // '' is initial value
+```
+
+---
+
+## Document Metadata
+
+Render anywhere — React 19 hoists to `<head>`:
+
+```tsx
+function BlogPost({ post }) {
+  return (
+    <article>
+      <title>{post.title}</title>
+      <meta name="description" content={post.summary} />
+      <meta name="author" content={post.author} />
+      <link rel="canonical" href={post.url} />
+
+      <h1>{post.title}</h1>
+      <p>{post.content}</p>
+    </article>
+  );
+}
+```
+
+---
+
+## Stylesheets & Scripts
+
+### Stylesheet with Precedence
+
+```tsx
+<link rel="stylesheet" href="base.css" precedence="default" />
+<link rel="stylesheet" href="theme.css" precedence="high" />
+```
+
+### Async Scripts (Auto-deduplicated)
+
+```tsx
+<script async src="analytics.js" />
+```
+
+---
+
+## Resource Preloading
+
+```tsx
+import { prefetchDNS, preconnect, preload, preinit } from 'react-dom';
+
+function App() {
+  // Preload critical resources
+  preinit('https://cdn.example.com/script.js', { as: 'script' });
+  preload('https://cdn.example.com/font.woff2', { as: 'font' });
+  preconnect('https://api.example.com');
+  prefetchDNS('https://images.example.com');
+
+  return <Main />;
+}
+```
+
+---
+
+## State Management Guidelines
+
+| Situation | Approach |
+|-----------|----------|
+| Component-specific data | Local `useState` |
+| Shared between siblings | Lift to nearest common parent |
+| App-wide (theme, auth, locale) | Context |
+| Complex state logic | `useReducer` |
+| Async data | `use()` + Suspense |
+| Optimistic updates | `useOptimistic` |
+
+**Avoid:**
+- Lifting state unnecessarily
+- Putting frequently-changing data in context
+- Global state for component-local concerns
+
+---
+
+## Error Handling
+
+### Error Boundary Options
+
+```tsx
+createRoot(document.getElementById('root'), {
+  onCaughtError: (error) => {
+    // Error caught by Error Boundary
+    console.error('Caught:', error);
+  },
+  onUncaughtError: (error) => {
+    // Uncaught error
+    console.error('Uncaught:', error);
+  },
+  onRecoverableError: (error) => {
+    // Auto-recovered error
+    console.warn('Recovered:', error);
+  },
+}).render(<App />);
+```
+
+---
+
+## Hydration Improvements
+
+React 19 provides:
+- **Partial hydration**: Only hydrate necessary parts
+- **Better streaming**: Improved handling of streamed HTML
+- **Clear error diffs**: Shows exactly what mismatched
+
+```
+Uncaught Error: Hydration failed...
+<App>
+  <span>
+  + Client
+  - Server
+```
+
+---
+
+## Custom Elements (Web Components)
+
+Full support for custom elements:
+
+```tsx
+<custom-button label="Click Me" onClick={handleClick} />
+```
+
+- SSR: Primitive types → attributes
+- CSR: Properties assigned correctly
+
+---
+
+## Code Review Checklist
+
+When reviewing React code:
+
+- [ ] No unnecessary `React.memo`, `useMemo`, `useCallback`
+- [ ] Using appropriate new hooks where beneficial
+- [ ] Actions used for async mutations
+- [ ] State kept local where possible
+- [ ] Refs passed as props (no `forwardRef`)
+- [ ] Context used only for truly global state
+- [ ] Suspense boundaries for async loading
+- [ ] `startTransition` for non-urgent updates
