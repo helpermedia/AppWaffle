@@ -9,7 +9,7 @@ This project has custom skills for in-depth guidance:
 | Skill | Description |
 |-------|-------------|
 | `/react` | React 19 best practices, hooks, patterns, and migration guide |
-| `/tailwind` | *(coming soon)* Tailwind CSS v4 patterns |
+| `/tailwind` | Tailwind CSS v4 best practices, configuration, and patterns |
 | `/dnd` | *(coming soon)* @dnd-kit drag-and-drop patterns |
 | `/rust` | *(coming soon)* Tauri/Rust backend patterns |
 

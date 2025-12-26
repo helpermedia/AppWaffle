@@ -21,7 +21,15 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useApps } from "../hooks/useApps";
 import { getIconSrc } from "../utils/iconUtils";
+import { cn } from "../utils/cn";
 import type { AppInfo } from "../types/app";
+
+// Shared styles for app items
+const itemStyles = {
+  container: "w-32 h-40 p-2 rounded-xl flex flex-col items-center justify-start pt-2",
+  icon: "w-24 h-24",
+  label: "text-xs text-white mt-1 w-full text-center leading-normal line-clamp-2",
+};
 
 type GridItem = AppInfo & { id: string };
 
@@ -52,35 +60,34 @@ function SortableAppItem({
       style={style}
       {...attributes}
       {...listeners}
-      className={`w-32 h-40 p-2 rounded-xl cursor-grab active:cursor-grabbing flex flex-col items-center justify-start pt-2 ${
-        isDragging ? "opacity-0" : isDragActive ? "transition-transform duration-200" : ""
-      }`}
+      className={cn(
+        itemStyles.container,
+        "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-0",
+        !isDragging && isDragActive && "transition-transform duration-200"
+      )}
     >
       <img
         src={getIconSrc(item.icon)}
         alt={item.name}
-        className="w-24 h-24"
+        className={itemStyles.icon}
         draggable={false}
       />
-      <span className="text-xs text-white mt-1 w-full text-center leading-normal line-clamp-2">
-        {item.name}
-      </span>
+      <span className={itemStyles.label}>{item.name}</span>
     </div>
   );
 }
 
 function AppItemOverlay({ item }: { item: GridItem }) {
   return (
-    <div className="w-32 h-40 p-2 rounded-xl flex flex-col items-center justify-start pt-2 cursor-grabbing">
+    <div className={cn(itemStyles.container, "cursor-grabbing")}>
       <img
         src={getIconSrc(item.icon)}
         alt={item.name}
-        className="w-24 h-24"
+        className={itemStyles.icon}
         draggable={false}
       />
-      <span className="text-xs text-white mt-1 w-full text-center leading-normal line-clamp-2">
-        {item.name}
-      </span>
+      <span className={itemStyles.label}>{item.name}</span>
     </div>
   );
 }
