@@ -12,6 +12,7 @@ import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 interface UseSortableGridOptions {
   initialOrder: string[] | null;
   enableKeyboard?: boolean;
+  onOrderChange?: (newOrder: string[]) => void;
 }
 
 interface UseSortableGridReturn {
@@ -26,6 +27,7 @@ interface UseSortableGridReturn {
 export function useSortableGrid({
   initialOrder,
   enableKeyboard = false,
+  onOrderChange,
 }: UseSortableGridOptions): UseSortableGridReturn {
   const [order, setOrder] = useState<string[] | null>(initialOrder);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -58,7 +60,9 @@ export function useSortableGrid({
         if (!prev) return prev;
         const oldIndex = prev.indexOf(String(active.id));
         const newIndex = prev.indexOf(String(over.id));
-        return arrayMove(prev, oldIndex, newIndex);
+        const newOrder = arrayMove(prev, oldIndex, newIndex);
+        onOrderChange?.(newOrder);
+        return newOrder;
       });
     }
   }

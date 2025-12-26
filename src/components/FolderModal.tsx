@@ -9,13 +9,17 @@ import { cn } from "@/utils/cn";
 
 interface FolderModalProps {
   folder: FolderInfo;
+  savedOrder?: string[];
+  onOrderChange?: (newOrder: string[]) => void;
   onClose: () => void;
 }
 
-export function FolderModal({ folder, onClose }: FolderModalProps) {
-  const initialOrder = folder.apps.map((app) => app.path);
+export function FolderModal({ folder, savedOrder, onOrderChange, onClose }: FolderModalProps) {
+  // Use saved order if available, otherwise use folder.apps order
+  const defaultOrder = folder.apps.map((app) => app.path);
+  const initialOrder = savedOrder && savedOrder.length > 0 ? savedOrder : defaultOrder;
   const { order, activeId, sensors, handleDragStart, handleDragEnd } =
-    useSortableGrid({ initialOrder });
+    useSortableGrid({ initialOrder, onOrderChange });
   const [isClosing, setIsClosing] = useState(false);
   const isClosingRef = useRef(false);
   const onCloseRef = useRef(onClose);

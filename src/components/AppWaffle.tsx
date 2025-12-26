@@ -4,6 +4,7 @@ import { DndContext, DragOverlay, closestCenter } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
 import { useApps } from "@/hooks/useApps";
 import { useSortableGrid } from "@/hooks/useSortableGrid";
+import { useOrderPersistence } from "@/hooks/useOrderPersistence";
 import { AppItem, type GridItem } from "@/components/items/AppItem";
 import { AppItemOverlay } from "@/components/items/AppItemOverlay";
 import { FolderItem, type GridFolder } from "@/components/items/FolderItem";
@@ -17,18 +18,63 @@ type GridItemUnion =
 
 export function AppWaffle() {
   const { apps, folders, loading, loadingMessage, error } = useApps();
+  const { loadOrder, saveOrder } = useOrderPersistence();
+  const [folderOrders, setFolderOrders] = useState<Record<string, string[]>>({});
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [savedMainOrder, setSavedMainOrder] = useState<string[] | null>(null);
+
+  function handleMainOrderChange(newOrder: string[]) {
+    saveOrder(newOrder, folderOrders);
+  }
+
+  function handleFolderOrderChange(folderPath: string, newOrder: string[]) {
+    const newFolderOrders = { ...folderOrders, [folderPath]: newOrder };
+    setFolderOrders(newFolderOrders);
+    if (order) {
+      saveOrder(order, newFolderOrders);
+    }
+  }
+
   const { order, setOrder, activeId, sensors, handleDragStart, handleDragEnd } =
-    useSortableGrid({ initialOrder: null, enableKeyboard: true });
+    useSortableGrid({
+      initialOrder: null,
+      enableKeyboard: true,
+      onOrderChange: handleMainOrderChange,
+    });
   const [openFolder, setOpenFolder] = useState<GridFolder | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const savedScrollTop = useRef(0);
 
-  // Initialize order once apps/folders load
-  if (order === null && (apps.length > 0 || folders.length > 0)) {
-    setOrder([
-      ...apps.map((app) => app.path),
-      ...folders.map((folder) => folder.path),
+  // Load saved order on mount
+  useEffect(() => {
+    loadOrder().then((config) => {
+      if (config) {
+        setSavedMainOrder(config.main);
+        setFolderOrders(config.folders);
+      }
+      setConfigLoaded(true);
+    });
+  }, [loadOrder]);
+
+  // Initialize order once apps/folders load AND config is loaded
+  if (order === null && configLoaded && (apps.length > 0 || folders.length > 0)) {
+    const allPaths = new Set([
+      ...apps.map((a) => a.path),
+      ...folders.map((f) => f.path),
     ]);
+
+    if (savedMainOrder && savedMainOrder.length > 0) {
+      // Use saved order, filter out removed items, append new items
+      const validSavedOrder = savedMainOrder.filter((p) => allPaths.has(p));
+      const newItems = [...allPaths].filter((p) => !savedMainOrder.includes(p));
+      setOrder([...validSavedOrder, ...newItems]);
+    } else {
+      // First launch - use alphabetical order
+      setOrder([
+        ...apps.map((app) => app.path),
+        ...folders.map((folder) => folder.path),
+      ]);
+    }
   }
 
   // Derive items from order + apps + folders (icons update automatically)
@@ -94,6 +140,8 @@ export function AppWaffle() {
       {openFolder && (
         <FolderModal
           folder={openFolder}
+          savedOrder={folderOrders[openFolder.path]}
+          onOrderChange={(newOrder) => handleFolderOrderChange(openFolder.path, newOrder)}
           onClose={() => {
             setOpenFolder(null);
             // Restore scroll position after render

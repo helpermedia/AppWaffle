@@ -14,3 +14,13 @@ export interface AppsResponse {
   apps: AppInfo[];
   folders: FolderInfo[];
 }
+
+export interface OrderConfig {
+  main: string[];
+  folders: Record<string, string[]>;
+}
+
+export interface AppConfig {
+  version: number;
+  order: OrderConfig;
+}

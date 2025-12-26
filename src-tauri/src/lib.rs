@@ -1,5 +1,6 @@
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -32,6 +33,27 @@ pub struct FolderInfo {
 pub struct AppsResponse {
     pub apps: Vec<AppInfo>,
     pub folders: Vec<FolderInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OrderConfig {
+    pub main: Vec<String>,
+    pub folders: HashMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppConfig {
+    pub version: u32,
+    pub order: OrderConfig,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            order: OrderConfig::default(),
+        }
+    }
 }
 
 fn get_applications_dirs() -> Vec<PathBuf> {
@@ -207,6 +229,57 @@ fn generate_and_cache_icon(app_path: &str) -> Option<String> {
     Some(format!("file://{}", saved_path.display()))
 }
 
+/// Get config directory: ~/Library/Application Support/com.appwaffle/
+fn get_config_dir() -> Option<PathBuf> {
+    dirs::config_dir().map(|p| p.join("com.appwaffle"))
+}
+
+/// Get config file path: ~/Library/Application Support/com.appwaffle/config.json
+fn get_config_path() -> Option<PathBuf> {
+    get_config_dir().map(|p| p.join("config.json"))
+}
+
+/// Load app config from disk
+#[tauri::command]
+async fn load_config() -> Result<AppConfig, String> {
+    let config_path = get_config_path()
+        .ok_or_else(|| "Could not determine config directory".to_string())?;
+
+    if !config_path.exists() {
+        return Ok(AppConfig::default());
+    }
+
+    let contents = fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config: {}", e))?;
+
+    serde_json::from_str(&contents)
+        .map_err(|e| format!("Failed to parse config: {}", e))
+}
+
+/// Save order configuration to disk
+#[tauri::command]
+async fn save_order(main: Vec<String>, folders: HashMap<String, Vec<String>>) -> Result<(), String> {
+    let config_dir = get_config_dir()
+        .ok_or_else(|| "Could not determine config directory".to_string())?;
+
+    fs::create_dir_all(&config_dir)
+        .map_err(|e| format!("Failed to create config directory: {}", e))?;
+
+    let config = AppConfig {
+        version: 1,
+        order: OrderConfig { main, folders },
+    };
+
+    let config_path = get_config_path().unwrap();
+    let json = serde_json::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+
+    fs::write(&config_path, json)
+        .map_err(|e| format!("Failed to write config: {}", e))?;
+
+    Ok(())
+}
+
 /// Generate icon for a single app (called from frontend for progressive loading)
 #[tauri::command]
 async fn get_app_icon(path: String) -> Option<String> {
@@ -339,7 +412,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_apps, get_app_icon, launch_app, show_window])
+        .invoke_handler(tauri::generate_handler![get_apps, get_app_icon, launch_app, show_window, load_config, save_order])
         .on_menu_event(|app, event| {
             if event.id() == "quit" {
                 app.exit(0);
