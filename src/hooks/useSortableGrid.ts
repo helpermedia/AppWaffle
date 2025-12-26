@@ -61,7 +61,10 @@ export function useSortableGrid({
         const oldIndex = prev.indexOf(String(active.id));
         const newIndex = prev.indexOf(String(over.id));
         const newOrder = arrayMove(prev, oldIndex, newIndex);
-        onOrderChange?.(newOrder);
+        // Call onOrderChange outside of render cycle via microtask
+        if (onOrderChange) {
+          queueMicrotask(() => onOrderChange(newOrder));
+        }
         return newOrder;
       });
     }

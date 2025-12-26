@@ -17,11 +17,12 @@ type GridItemUnion =
   | { type: "folder"; data: GridFolder };
 
 export function AppWaffle() {
-  const { apps, folders, loading, loadingMessage, error } = useApps();
-  const { loadOrder, saveOrder } = useOrderPersistence();
-  const [folderOrders, setFolderOrders] = useState<Record<string, string[]>>({});
-  const [configLoaded, setConfigLoaded] = useState(false);
-  const [savedMainOrder, setSavedMainOrder] = useState<string[] | null>(null);
+  const { apps, folders } = useApps();
+  const { config, configLoaded, saveOrder } = useOrderPersistence();
+  // Track local folder order changes (merged with config)
+  const [localFolderOrders, setLocalFolderOrders] = useState<Record<string, string[]>>({});
+  // Merge config folders with local changes
+  const folderOrders = { ...config?.folders, ...localFolderOrders };
 
   function handleMainOrderChange(newOrder: string[]) {
     saveOrder(newOrder, folderOrders);
@@ -29,7 +30,7 @@ export function AppWaffle() {
 
   function handleFolderOrderChange(folderPath: string, newOrder: string[]) {
     const newFolderOrders = { ...folderOrders, [folderPath]: newOrder };
-    setFolderOrders(newFolderOrders);
+    setLocalFolderOrders(newFolderOrders);
     if (order) {
       saveOrder(order, newFolderOrders);
     }
@@ -45,17 +46,6 @@ export function AppWaffle() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const savedScrollTop = useRef(0);
 
-  // Load saved order on mount
-  useEffect(() => {
-    loadOrder().then((config) => {
-      if (config) {
-        setSavedMainOrder(config.main);
-        setFolderOrders(config.folders);
-      }
-      setConfigLoaded(true);
-    });
-  }, [loadOrder]);
-
   // Initialize order once apps/folders load AND config is loaded
   if (order === null && configLoaded && (apps.length > 0 || folders.length > 0)) {
     const allPaths = new Set([
@@ -63,10 +53,10 @@ export function AppWaffle() {
       ...folders.map((f) => f.path),
     ]);
 
-    if (savedMainOrder && savedMainOrder.length > 0) {
+    if (config?.main && config.main.length > 0) {
       // Use saved order, filter out removed items, append new items
-      const validSavedOrder = savedMainOrder.filter((p) => allPaths.has(p));
-      const newItems = [...allPaths].filter((p) => !savedMainOrder.includes(p));
+      const validSavedOrder = config.main.filter((p) => allPaths.has(p));
+      const newItems = [...allPaths].filter((p) => !config.main.includes(p));
       setOrder([...validSavedOrder, ...newItems]);
     } else {
       // First launch - use alphabetical order
@@ -107,22 +97,6 @@ export function AppWaffle() {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [openFolder]);
-
-  if (loading) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <p className="text-white/70">{loadingMessage}</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <p className="text-red-400">Error: {error}</p>
-      </div>
-    );
-  }
 
   // Get IDs for SortableContext
   const itemIds = items.map((item) => item.data.id);

@@ -207,6 +207,77 @@ async function createPost(formData) {
 
 ---
 
+## Data Fetching
+
+### Don't Use `useEffect` for Data Fetching
+
+`useEffect` for data fetching is a React 18 anti-pattern. It causes:
+- Waterfalls (fetch after render)
+- Race conditions
+- No Suspense integration
+- Boilerplate for loading/error states
+
+### Use `use()` + Suspense Instead
+
+```tsx
+// ❌ Don't: useEffect for fetching
+function UserProfile({ userId }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchUser(userId).then(setUser).finally(() => setLoading(false));
+  }, [userId]);
+
+  if (loading) return <Spinner />;
+  return <div>{user.name}</div>;
+}
+
+// ✅ Do: use() with Suspense
+function UserProfile({ userPromise }) {
+  const user = use(userPromise);
+  return <div>{user.name}</div>;
+}
+
+// Wrap in Suspense
+<Suspense fallback={<Spinner />}>
+  <UserProfile userPromise={fetchUser(userId)} />
+</Suspense>
+```
+
+### Start Fetching Early (Module-Level)
+
+For data needed at app startup, start fetching immediately:
+
+```tsx
+// api.ts — fetch starts when module is imported
+let dataPromise: Promise<Data> | null = null;
+
+export function getDataPromise(): Promise<Data> {
+  if (!dataPromise) {
+    dataPromise = fetch('/api/data').then(r => r.json());
+  }
+  return dataPromise;
+}
+
+// Start immediately
+getDataPromise();
+
+// Component.tsx
+function Component() {
+  const data = use(getDataPromise());
+  return <div>{data.value}</div>;
+}
+```
+
+This pattern ensures:
+- Fetching runs parallel with other initialization
+- No wasted renders waiting for data
+- Clean separation of data fetching from UI
+
+---
+
 ## Simplified Patterns
 
 ### Refs as Props (No `forwardRef`)
@@ -395,6 +466,7 @@ Full support for custom elements:
 When reviewing React code:
 
 - [ ] No unnecessary `React.memo`, `useMemo`, `useCallback`
+- [ ] No `useEffect` for data fetching — use `use()` + Suspense
 - [ ] Using appropriate new hooks where beneficial
 - [ ] Actions used for async mutations
 - [ ] State kept local where possible
