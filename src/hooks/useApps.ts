@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppInfo, FolderInfo, AppsResponse } from "../types/app";
+import type { AppInfo, FolderInfo, AppsResponse } from "@/types/app";
 
 interface UseAppsResult {
   apps: AppInfo[];

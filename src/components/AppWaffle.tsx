@@ -1,34 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { exit } from "@tauri-apps/plugin-process";
-import {
-  DndContext,
-  DragOverlay,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragStartEvent,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  rectSortingStrategy,
-} from "@dnd-kit/sortable";
-import { useApps } from "../hooks/useApps";
-import {
-  SortableAppItem,
-  AppItemOverlay,
-  type GridItem,
-} from "./items/AppItem";
-import {
-  SortableFolderItem,
-  FolderItemOverlay,
-  type GridFolder,
-} from "./items/FolderItem";
-import { FolderModal } from "./FolderModal";
+import { DndContext, DragOverlay, closestCenter } from "@dnd-kit/core";
+import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
+import { useApps } from "@/hooks/useApps";
+import { useSortableGrid } from "@/hooks/useSortableGrid";
+import { AppItem, type GridItem } from "@/components/items/AppItem";
+import { AppItemOverlay } from "@/components/items/AppItemOverlay";
+import { FolderItem, type GridFolder } from "@/components/items/FolderItem";
+import { FolderItemOverlay } from "@/components/items/FolderItemOverlay";
+import { FolderModal } from "@/components/FolderModal";
 
 // Union type for grid items
 type GridItemUnion =
@@ -37,8 +17,8 @@ type GridItemUnion =
 
 export function AppWaffle() {
   const { apps, folders, loading, loadingMessage, error } = useApps();
-  const [order, setOrder] = useState<string[] | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const { order, setOrder, activeId, sensors, handleDragStart, handleDragEnd } =
+    useSortableGrid({ initialOrder: null, enableKeyboard: true });
   const [openFolder, setOpenFolder] = useState<GridFolder | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const savedScrollTop = useRef(0);
@@ -72,17 +52,6 @@ export function AppWaffle() {
 
   const activeItem = activeId ? items.find((i) => i.data.id === activeId) ?? null : null;
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !openFolder) {
@@ -92,24 +61,6 @@ export function AppWaffle() {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [openFolder]);
-
-  function handleDragStart(event: DragStartEvent) {
-    setActiveId(String(event.active.id));
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    setActiveId(null);
-
-    if (over && active.id !== over.id) {
-      setOrder((prev) => {
-        if (!prev) return prev;
-        const oldIndex = prev.indexOf(String(active.id));
-        const newIndex = prev.indexOf(String(over.id));
-        return arrayMove(prev, oldIndex, newIndex);
-      });
-    }
-  }
 
   if (loading) {
     return (
@@ -166,13 +117,13 @@ export function AppWaffle() {
             <div className="grid grid-cols-7 gap-4 place-items-center max-w-7xl mx-auto">
               {items.map((item) =>
                 item.type === "app" ? (
-                  <SortableAppItem
+                  <AppItem
                     key={item.data.id}
                     item={item.data}
                     isDragActive={activeItem !== null}
                   />
                 ) : (
-                  <SortableFolderItem
+                  <FolderItem
                     key={item.data.id}
                     item={item.data}
                     isDragActive={activeItem !== null}

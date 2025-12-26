@@ -1,22 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import {
-  DndContext,
-  DragOverlay,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragStartEvent,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  rectSortingStrategy,
-} from "@dnd-kit/sortable";
-import type { FolderInfo } from "../types/app";
-import { SortableAppItem, AppItemOverlay, type GridItem } from "./items/AppItem";
-import { cn } from "../utils/cn";
+import { DndContext, DragOverlay, closestCenter } from "@dnd-kit/core";
+import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
+import type { FolderInfo } from "@/types/app";
+import { AppItem, type GridItem } from "@/components/items/AppItem";
+import { AppItemOverlay } from "@/components/items/AppItemOverlay";
+import { useSortableGrid } from "@/hooks/useSortableGrid";
+import { cn } from "@/utils/cn";
 
 interface FolderModalProps {
   folder: FolderInfo;
@@ -24,10 +13,9 @@ interface FolderModalProps {
 }
 
 export function FolderModal({ folder, onClose }: FolderModalProps) {
-  const [order, setOrder] = useState<string[]>(() =>
-    folder.apps.map((app) => app.path)
-  );
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const initialOrder = folder.apps.map((app) => app.path);
+  const { order, activeId, sensors, handleDragStart, handleDragEnd } =
+    useSortableGrid({ initialOrder });
   const [isClosing, setIsClosing] = useState(false);
   const isClosingRef = useRef(false);
   const onCloseRef = useRef(onClose);
@@ -45,7 +33,7 @@ export function FolderModal({ folder, onClose }: FolderModalProps) {
 
   // Derive items from order + folder apps
   const appsMap = new Map(folder.apps.map((app) => [app.path, app]));
-  const items = order
+  const items = (order ?? [])
     .map((id) => {
       const app = appsMap.get(id);
       return app ? { ...app, id } : null;
@@ -54,14 +42,6 @@ export function FolderModal({ folder, onClose }: FolderModalProps) {
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
   const itemIds = items.map((item) => item.id);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
-    })
-  );
 
   // Close on Escape
   useEffect(() => {
@@ -74,23 +54,6 @@ export function FolderModal({ folder, onClose }: FolderModalProps) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  function handleDragStart(event: DragStartEvent) {
-    setActiveId(String(event.active.id));
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    setActiveId(null);
-
-    if (over && active.id !== over.id) {
-      setOrder((prev) => {
-        const oldIndex = prev.indexOf(String(active.id));
-        const newIndex = prev.indexOf(String(over.id));
-        return arrayMove(prev, oldIndex, newIndex);
-      });
-    }
-  }
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -129,7 +92,7 @@ export function FolderModal({ folder, onClose }: FolderModalProps) {
           <SortableContext items={itemIds} strategy={rectSortingStrategy}>
             <div className="grid grid-cols-7 gap-4 place-items-center">
               {items.map((item) => (
-                <SortableAppItem
+                <AppItem
                   key={item.id}
                   item={item}
                   isDragActive={activeItem !== null}
