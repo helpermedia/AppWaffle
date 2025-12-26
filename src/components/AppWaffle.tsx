@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { exit } from "@tauri-apps/plugin-process";
 import {
   DndContext,
   DragOverlay,
@@ -118,6 +119,16 @@ export function AppWaffle() {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        exit(0);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id));
