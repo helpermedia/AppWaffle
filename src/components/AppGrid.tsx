@@ -13,8 +13,8 @@ import {
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import type { AppInfo, FolderInfo } from "../types/app";
-import { AppIcon } from "./AppIcon";
-import { FolderIcon } from "./FolderIcon";
+import { AppItem } from "./AppItem";
+import { FolderItem } from "./FolderItem";
 import { SortableItem } from "./SortableItem";
 
 type GridItem =
@@ -136,7 +136,7 @@ export function AppGrid({ apps, folders, onLaunch, onOpenFolder, launchingPath }
             return (
               <SortableItem key={itemId} id={itemId}>
                 {item.type === "app" ? (
-                  <AppIcon
+                  <AppItem
                     ref={(el) => { buttonRefs.current[index] = el; }}
                     app={item.data}
                     index={index}
@@ -144,7 +144,7 @@ export function AppGrid({ apps, folders, onLaunch, onOpenFolder, launchingPath }
                     isLaunching={item.data.path === launchingPath}
                   />
                 ) : (
-                  <FolderIcon
+                  <FolderItem
                     ref={(el) => { buttonRefs.current[index] = el; }}
                     folder={item.data}
                     index={index}

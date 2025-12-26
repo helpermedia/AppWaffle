@@ -13,7 +13,7 @@ import {
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import type { AppInfo, FolderInfo } from "../types/app";
-import { AppIcon } from "./AppIcon";
+import { AppItem } from "./AppItem";
 import { SortableItem } from "./SortableItem";
 
 interface FolderModalProps {
@@ -123,7 +123,7 @@ export function FolderModal({ folder, onClose, onLaunch, launchingPath }: Folder
             <div className="grid grid-cols-4 gap-2">
               {apps.map((app, index) => (
                 <SortableItem key={app.path} id={app.path}>
-                  <AppIcon
+                  <AppItem
                     ref={(el) => { buttonRefs.current[index] = el; }}
                     app={app}
                     index={index}
