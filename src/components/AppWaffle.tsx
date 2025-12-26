@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { exit } from "@tauri-apps/plugin-process";
 import {
   DndContext,
@@ -15,105 +15,62 @@ import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  useSortable,
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { useApps } from "../hooks/useApps";
-import { getIconSrc } from "../utils/iconUtils";
-import { cn } from "../utils/cn";
-import type { AppInfo } from "../types/app";
+import {
+  SortableAppItem,
+  AppItemOverlay,
+  type GridItem,
+} from "./items/AppItem";
+import {
+  SortableFolderItem,
+  FolderItemOverlay,
+  type GridFolder,
+} from "./items/FolderItem";
+import { FolderModal } from "./FolderModal";
 
-// Shared styles for app items
-const itemStyles = {
-  container: "w-32 h-40 p-2 rounded-xl flex flex-col items-center justify-start pt-2",
-  icon: "w-24 h-24",
-  label: "text-xs text-white mt-1 w-full text-center leading-normal line-clamp-2",
-};
-
-type GridItem = AppInfo & { id: string };
-
-function SortableAppItem({
-  item,
-  isDragActive,
-}: {
-  item: GridItem;
-  isDragActive: boolean;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({
-      id: item.id,
-      transition: {
-        duration: 200,
-        easing: "ease",
-      },
-    });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        itemStyles.container,
-        isDragging && "opacity-0",
-        !isDragging && isDragActive && "transition-transform duration-200"
-      )}
-    >
-      <img
-        src={getIconSrc(item.icon)}
-        alt={item.name}
-        className={itemStyles.icon}
-        draggable={false}
-        {...attributes}
-        {...listeners}
-      />
-      <span className={itemStyles.label}>{item.name}</span>
-    </div>
-  );
-}
-
-function AppItemOverlay({ item }: { item: GridItem }) {
-  return (
-    <div className={itemStyles.container}>
-      <img
-        src={getIconSrc(item.icon)}
-        alt={item.name}
-        className={itemStyles.icon}
-        draggable={false}
-      />
-      <span className={itemStyles.label}>{item.name}</span>
-    </div>
-  );
-}
+// Union type for grid items
+type GridItemUnion =
+  | { type: "app"; data: GridItem }
+  | { type: "folder"; data: GridFolder };
 
 export function AppWaffle() {
-  const { apps, loading, loadingMessage, error } = useApps();
+  const { apps, folders, loading, loadingMessage, error } = useApps();
   const [order, setOrder] = useState<string[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [openFolder, setOpenFolder] = useState<GridFolder | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const savedScrollTop = useRef(0);
 
-  // Initialize order once apps load
-  if (order === null && apps.length > 0) {
-    setOrder(apps.map((app) => app.path));
+  // Initialize order once apps/folders load
+  if (order === null && (apps.length > 0 || folders.length > 0)) {
+    setOrder([
+      ...apps.map((app) => app.path),
+      ...folders.map((folder) => folder.path),
+    ]);
   }
 
-  // Derive items from order + apps (icons update automatically)
-  const items = useMemo(() => {
+  // Derive items from order + apps + folders (icons update automatically)
+  const items = useMemo((): GridItemUnion[] => {
     if (!order) return [];
     const appsMap = new Map(apps.map((app) => [app.path, app]));
-    return order
-      .map((id) => {
-        const app = appsMap.get(id);
-        return app ? { ...app, id } : null;
-      })
-      .filter((item): item is GridItem => item !== null);
-  }, [order, apps]);
+    const foldersMap = new Map(folders.map((folder) => [folder.path, folder]));
 
-  const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
+    return order
+      .map((id): GridItemUnion | null => {
+        const app = appsMap.get(id);
+        if (app) return { type: "app", data: { ...app, id } };
+
+        const folder = foldersMap.get(id);
+        if (folder) return { type: "folder", data: { ...folder, id } };
+
+        return null;
+      })
+      .filter((item): item is GridItemUnion => item !== null);
+  }, [order, apps, folders]);
+
+  const activeItem = activeId ? items.find((i) => i.data.id === activeId) ?? null : null;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -128,13 +85,13 @@ export function AppWaffle() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !openFolder) {
         exit(0);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [openFolder]);
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id));
@@ -170,30 +127,72 @@ export function AppWaffle() {
     );
   }
 
-  return (
-    <div className="w-full h-full p-20 overflow-auto">
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext items={items} strategy={rectSortingStrategy}>
-          <div className="grid grid-cols-7 gap-4 place-items-center max-w-7xl mx-auto">
-            {items.map((item) => (
-              <SortableAppItem
-                key={item.id}
-                item={item}
-                isDragActive={activeItem !== null}
-              />
-            ))}
-          </div>
-        </SortableContext>
+  // Get IDs for SortableContext
+  const itemIds = items.map((item) => item.data.id);
 
-        <DragOverlay>
-          {activeItem && <AppItemOverlay item={activeItem} />}
-        </DragOverlay>
-      </DndContext>
+  const handleOpenFolder = (folder: GridFolder) => {
+    // Save scroll position before opening folder
+    if (scrollRef.current) {
+      savedScrollTop.current = scrollRef.current.scrollTop;
+    }
+    setOpenFolder(folder);
+  };
+
+  return (
+    <div ref={scrollRef} className="w-full h-full p-20 overflow-auto">
+      {openFolder && (
+        <FolderModal
+          folder={openFolder}
+          onClose={() => {
+            setOpenFolder(null);
+            // Restore scroll position after render
+            requestAnimationFrame(() => {
+              if (scrollRef.current) {
+                scrollRef.current.scrollTop = savedScrollTop.current;
+              }
+            });
+          }}
+        />
+      )}
+
+      <div className={openFolder ? "hidden" : undefined}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext items={itemIds} strategy={rectSortingStrategy}>
+            <div className="grid grid-cols-7 gap-4 place-items-center max-w-7xl mx-auto">
+              {items.map((item) =>
+                item.type === "app" ? (
+                  <SortableAppItem
+                    key={item.data.id}
+                    item={item.data}
+                    isDragActive={activeItem !== null}
+                  />
+                ) : (
+                  <SortableFolderItem
+                    key={item.data.id}
+                    item={item.data}
+                    isDragActive={activeItem !== null}
+                    onOpen={handleOpenFolder}
+                  />
+                )
+              )}
+            </div>
+          </SortableContext>
+
+          <DragOverlay>
+            {activeItem?.type === "app" && (
+              <AppItemOverlay item={activeItem.data} />
+            )}
+            {activeItem?.type === "folder" && (
+              <FolderItemOverlay item={activeItem.data} />
+            )}
+          </DragOverlay>
+        </DndContext>
+      </div>
     </div>
   );
 }
