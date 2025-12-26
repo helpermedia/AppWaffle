@@ -51,21 +51,17 @@ function SortableAppItem({
       style={style}
       {...attributes}
       {...listeners}
-      className={`w-20 h-24 p-2 rounded-xl cursor-grab active:cursor-grabbing flex flex-col items-center justify-center ${
-        isDragging
-          ? "opacity-0"
-          : isDragActive
-            ? "transition-transform duration-200"
-            : "hover:bg-white/10 transition-all"
+      className={`w-32 h-40 p-2 rounded-xl cursor-grab active:cursor-grabbing flex flex-col items-center justify-start pt-2 ${
+        isDragging ? "opacity-0" : isDragActive ? "transition-transform duration-200" : ""
       }`}
     >
       <img
         src={getIconSrc(item.icon)}
         alt={item.name}
-        className="w-16 h-16 rounded-xl shadow-lg"
+        className="w-24 h-24"
         draggable={false}
       />
-      <span className="text-xs text-white mt-1 truncate w-full text-center">
+      <span className="text-xs text-white mt-1 w-full text-center leading-normal line-clamp-2">
         {item.name}
       </span>
     </div>
@@ -74,14 +70,14 @@ function SortableAppItem({
 
 function AppItemOverlay({ item }: { item: GridItem }) {
   return (
-    <div className="w-20 h-24 p-2 rounded-xl flex flex-col items-center justify-center cursor-grabbing">
+    <div className="w-32 h-40 p-2 rounded-xl flex flex-col items-center justify-start pt-2 cursor-grabbing">
       <img
         src={getIconSrc(item.icon)}
         alt={item.name}
-        className="w-16 h-16 rounded-xl shadow-2xl shadow-black/50"
+        className="w-24 h-24"
         draggable={false}
       />
-      <span className="text-xs text-white mt-1 truncate w-full text-center">
+      <span className="text-xs text-white mt-1 w-full text-center leading-normal line-clamp-2">
         {item.name}
       </span>
     </div>
@@ -158,7 +154,7 @@ export function AppWaffle() {
   }
 
   return (
-    <div className="w-full h-full p-4 overflow-auto">
+    <div className="w-full h-full p-20 overflow-auto">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -166,7 +162,7 @@ export function AppWaffle() {
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={items} strategy={rectSortingStrategy}>
-          <div className="flex flex-wrap gap-2 justify-center">
+          <div className="grid grid-cols-7 gap-4 place-items-center max-w-7xl mx-auto">
             {items.map((item) => (
               <SortableAppItem
                 key={item.id}
