@@ -53,6 +53,7 @@ export function FolderModal({ folder, onClose }: FolderModalProps) {
     .filter((item): item is GridItem => item !== null);
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
+  const itemIds = items.map((item) => item.id);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -98,34 +99,34 @@ export function FolderModal({ folder, onClose }: FolderModalProps) {
   };
 
   return (
-    <div
-      className={cn(
-        "h-full flex flex-col items-center justify-center",
-        isClosing ? "animate-fade-out" : "animate-fade-in"
-      )}
-      onClick={handleBackdropClick}
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
     >
-      <h2
-        className={cn(
-          "text-white text-xl font-medium text-center mb-4 drop-shadow-md",
-          isClosing ? "animate-scale-out" : "animate-scale-in"
-        )}
-      >
-        {folder.name}
-      </h2>
       <div
         className={cn(
-          "bg-white/15 backdrop-blur-xl rounded-3xl pt-8 pb-4 w-full max-w-7xl max-h-[60vh] overflow-y-auto",
-          isClosing ? "animate-scale-out" : "animate-scale-in"
+          "h-full flex flex-col items-center justify-center",
+          isClosing ? "animate-fade-out" : "animate-fade-in"
         )}
+        onClick={handleBackdropClick}
       >
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
+        <h2
+          className={cn(
+            "text-white text-xl font-medium text-center mb-4 drop-shadow-md",
+            isClosing ? "animate-scale-out" : "animate-scale-in"
+          )}
         >
-          <SortableContext items={items} strategy={rectSortingStrategy}>
+          {folder.name}
+        </h2>
+        <div
+          className={cn(
+            "bg-white/15 backdrop-blur-xl rounded-3xl pt-8 pb-4 w-full max-w-7xl max-h-[60vh] overflow-y-auto",
+            isClosing ? "animate-scale-out" : "animate-scale-in"
+          )}
+        >
+          <SortableContext items={itemIds} strategy={rectSortingStrategy}>
             <div className="grid grid-cols-7 gap-4 place-items-center">
               {items.map((item) => (
                 <SortableAppItem
@@ -136,12 +137,12 @@ export function FolderModal({ folder, onClose }: FolderModalProps) {
               ))}
             </div>
           </SortableContext>
-
-          <DragOverlay>
-            {activeItem && <AppItemOverlay item={activeItem} />}
-          </DragOverlay>
-        </DndContext>
+        </div>
       </div>
-    </div>
+
+      <DragOverlay>
+        {activeItem && <AppItemOverlay item={activeItem} />}
+      </DragOverlay>
+    </DndContext>
   );
 }
