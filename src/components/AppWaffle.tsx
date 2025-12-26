@@ -58,11 +58,8 @@ function SortableAppItem({
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
       className={cn(
         itemStyles.container,
-        "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-0",
         !isDragging && isDragActive && "transition-transform duration-200"
       )}
@@ -72,6 +69,8 @@ function SortableAppItem({
         alt={item.name}
         className={itemStyles.icon}
         draggable={false}
+        {...attributes}
+        {...listeners}
       />
       <span className={itemStyles.label}>{item.name}</span>
     </div>
@@ -80,7 +79,7 @@ function SortableAppItem({
 
 function AppItemOverlay({ item }: { item: GridItem }) {
   return (
-    <div className={cn(itemStyles.container, "cursor-grabbing")}>
+    <div className={itemStyles.container}>
       <img
         src={getIconSrc(item.icon)}
         alt={item.name}
