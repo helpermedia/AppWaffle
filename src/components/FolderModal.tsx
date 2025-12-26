@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -29,23 +29,28 @@ export function FolderModal({ folder, onClose }: FolderModalProps) {
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const isClosingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
 
-  const handleClose = useCallback(() => {
-    if (isClosing) return;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  function handleClose() {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
     setIsClosing(true);
-    setTimeout(onClose, 200); // Match animation duration
-  }, [isClosing, onClose]);
+    setTimeout(() => onCloseRef.current(), 200); // Match animation duration
+  }
 
   // Derive items from order + folder apps
-  const items = useMemo(() => {
-    const appsMap = new Map(folder.apps.map((app) => [app.path, app]));
-    return order
-      .map((id) => {
-        const app = appsMap.get(id);
-        return app ? { ...app, id } : null;
-      })
-      .filter((item): item is GridItem => item !== null);
-  }, [order, folder.apps]);
+  const appsMap = new Map(folder.apps.map((app) => [app.path, app]));
+  const items = order
+    .map((id) => {
+      const app = appsMap.get(id);
+      return app ? { ...app, id } : null;
+    })
+    .filter((item): item is GridItem => item !== null);
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
 
@@ -67,7 +72,7 @@ export function FolderModal({ folder, onClose }: FolderModalProps) {
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleClose]);
+  }, []);
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id));

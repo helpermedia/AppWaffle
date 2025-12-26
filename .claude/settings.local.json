@@ -6,7 +6,11 @@
       "Bash(bun run build:*)",
       "Bash(bun tauri build:*)",
       "Bash(bun add:*)",
-      "WebFetch(domain:codesandbox.io)"
+      "WebFetch(domain:codesandbox.io)",
+      "Skill(tailwind)",
+      "Skill(tailwind:*)",
+      "Skill(react)",
+      "Skill(react:*)"
     ]
   }
 }

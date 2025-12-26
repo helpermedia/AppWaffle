@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { exit } from "@tauri-apps/plugin-process";
 import {
   DndContext,
@@ -52,7 +52,7 @@ export function AppWaffle() {
   }
 
   // Derive items from order + apps + folders (icons update automatically)
-  const items = useMemo((): GridItemUnion[] => {
+  const items: GridItemUnion[] = (() => {
     if (!order) return [];
     const appsMap = new Map(apps.map((app) => [app.path, app]));
     const foldersMap = new Map(folders.map((folder) => [folder.path, folder]));
@@ -68,7 +68,7 @@ export function AppWaffle() {
         return null;
       })
       .filter((item): item is GridItemUnion => item !== null);
-  }, [order, apps, folders]);
+  })();
 
   const activeItem = activeId ? items.find((i) => i.data.id === activeId) ?? null : null;
 
