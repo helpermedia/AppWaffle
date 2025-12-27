@@ -58,8 +58,18 @@ export function AppWaffle() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [openFolder]);
 
+  // Close on click outside (empty space)
+  function handleBackgroundClick(e: React.MouseEvent) {
+    // Don't close if folder is open, dragging, or clicking on an item
+    if (openFolder || activeItem) return;
+    const target = e.target as HTMLElement;
+    if (!target.closest("[data-grid-item]")) {
+      invoke("quit_app");
+    }
+  }
+
   return (
-    <div ref={scrollRef} className="w-full h-full p-20 overflow-auto">
+    <div ref={scrollRef} className="w-full h-full p-20 overflow-auto" onClick={handleBackgroundClick}>
       {openFolder && (
         <FolderModal
           folder={openFolder}

@@ -5,6 +5,6 @@ import type { DndSettings } from "@/types/app";
  */
 export const DEFAULT_DND_SETTINGS: DndSettings = {
   folderCreationDelay: 800,
-  motionThreshold: 10,
+  motionThreshold: 1,
   sortingDelay: 150,
 };

@@ -13,6 +13,7 @@ export function Container({ children, className, style, ref }: ContainerProps) {
     <div
       ref={ref}
       style={style}
+      data-grid-item
       className={cn(
         "w-32 h-40 p-2 rounded-xl flex flex-col items-center",
         className

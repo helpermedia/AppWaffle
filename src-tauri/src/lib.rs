@@ -458,12 +458,22 @@ pub fn run() {
                 app.exit(0);
             }
         })
-        .on_window_event(|_window, event| {
-            if let WindowEvent::CloseRequested { .. } = event {
-                // Save order state before window closes
-                if let Err(e) = save_order_to_disk() {
-                    eprintln!("Failed to save order on close: {}", e);
+        .on_window_event(|window, event| {
+            match event {
+                WindowEvent::Focused(false) => {
+                    // Close when losing focus (like real Launchpad)
+                    if let Err(e) = save_order_to_disk() {
+                        eprintln!("Failed to save order on focus loss: {}", e);
+                    }
+                    window.app_handle().exit(0);
                 }
+                WindowEvent::CloseRequested { .. } => {
+                    // Save order state before window closes
+                    if let Err(e) = save_order_to_disk() {
+                        eprintln!("Failed to save order on close: {}", e);
+                    }
+                }
+                _ => {}
             }
         })
         .run(tauri::generate_context!())

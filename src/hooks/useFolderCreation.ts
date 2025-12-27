@@ -32,16 +32,17 @@ export function useFolderCreation({
   // Track hover state for folder creation dwell time with motion detection
   const hoverRef = useRef<{
     id: string;
-    timerId: ReturnType<typeof setTimeout>;
-    lastX: number;
-    lastY: number;
+    timerId: ReturnType<typeof setTimeout> | null;
+    startX: number;
+    startY: number;
+    triggered: boolean;  // True once timer completed and highlight is showing
   } | null>(null);
 
   function clearHoverTimer() {
-    if (hoverRef.current) {
+    if (hoverRef.current?.timerId) {
       clearTimeout(hoverRef.current.timerId);
-      hoverRef.current = null;
     }
+    hoverRef.current = null;
   }
 
   function getDistance(x1: number, y1: number, x2: number, y2: number): number {
@@ -49,7 +50,7 @@ export function useFolderCreation({
   }
 
   function handleDragOver(event: DragOverEvent) {
-    const { active, over } = event;
+    const { active, over, delta } = event;
 
     if (!over || active.id === over.id) {
       clearHoverTimer();
@@ -61,10 +62,10 @@ export function useFolderCreation({
     const activeType = getItemType(String(active.id));
     const overType = getItemType(overId);
 
-    // Get current drag position
-    const rect = active.rect.current.translated;
-    const currentX = rect?.left ?? 0;
-    const currentY = rect?.top ?? 0;
+    // Use delta for motion detection - this actually updates during drag
+    // (activeRect positions are static and don't work)
+    const currentX = delta.x;
+    const currentY = delta.y;
 
     // Only apps can be dragged to create/add to folders
     if (activeType !== "app") {
@@ -86,33 +87,46 @@ export function useFolderCreation({
 
       // Check if we're hovering over the same item
       if (hover?.id === overId) {
-        // Check if cursor moved beyond threshold - reset timer if so
-        const distance = getDistance(currentX, currentY, hover.lastX, hover.lastY);
-        if (distance > motionThreshold) {
-          // Motion detected - clear ring and restart timer from current position
-          clearTimeout(hover.timerId);
+        // Already triggered - just stay in triggered state while on same target
+        if (hover.triggered) {
+          return;
+        }
+
+        // Check drift from initial position
+        const driftDistance = getDistance(currentX, currentY, hover.startX, hover.startY);
+        if (driftDistance > motionThreshold) {
+          // Drifted too far - cancel timer and restart from current position
+          if (hover.timerId) {
+            clearTimeout(hover.timerId);
+          }
           setDropTarget(null);
           const timerId = setTimeout(() => {
             setDropTarget({ id: overId, action: "create-folder" });
-            hoverRef.current = null;
+            if (hoverRef.current) {
+              hoverRef.current.triggered = true;
+              hoverRef.current.timerId = null;
+            }
           }, folderCreationDelay);
-          hoverRef.current = { id: overId, timerId, lastX: currentX, lastY: currentY };
+          hoverRef.current = { id: overId, timerId, startX: currentX, startY: currentY, triggered: false };
         }
         // If within threshold, let existing timer continue
         return;
       }
 
-      // New target - clear any existing timer and dropTarget, start fresh
+      // Different target or first target - clear everything and start fresh
       clearHoverTimer();
       setDropTarget(null);
 
       // Start dwell timer for folder creation
       const timerId = setTimeout(() => {
         setDropTarget({ id: overId, action: "create-folder" });
-        hoverRef.current = null;
+        if (hoverRef.current) {
+          hoverRef.current.triggered = true;
+          hoverRef.current.timerId = null;
+        }
       }, folderCreationDelay);
 
-      hoverRef.current = { id: overId, timerId, lastX: currentX, lastY: currentY };
+      hoverRef.current = { id: overId, timerId, startX: currentX, startY: currentY, triggered: false };
       return;
     }
 
