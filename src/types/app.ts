@@ -10,7 +10,7 @@ export interface FolderInfo {
   apps: AppInfo[];
 }
 
-export interface VirtualFolderMetadata {
+export interface FolderMetadata {
   id: string;
   name: string;
   appPaths: string[];
@@ -24,8 +24,7 @@ export interface AppsResponse {
 
 export interface OrderConfig {
   main: string[];
-  folders: Record<string, string[]>;
-  virtualFolders?: VirtualFolderMetadata[];
+  folders: FolderMetadata[];
 }
 
 export interface DndSettings {

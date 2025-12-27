@@ -1,5 +1,5 @@
 import { createContext } from "react";
-import type { DndSettings, OrderConfig, VirtualFolderMetadata } from "@/types/app";
+import type { DndSettings, FolderMetadata, OrderConfig } from "@/types/app";
 
 export interface ConfigContextValue {
   // DnD settings
@@ -9,11 +9,7 @@ export interface ConfigContextValue {
   orderConfig: OrderConfig | null;
 
   // Persistence
-  saveOrder: (
-    main: string[],
-    folders: Record<string, string[]>,
-    virtualFolders: VirtualFolderMetadata[]
-  ) => void;
+  saveOrder: (main: string[], folders: FolderMetadata[]) => void;
 }
 
 export const ConfigContext = createContext<ConfigContextValue | null>(null);

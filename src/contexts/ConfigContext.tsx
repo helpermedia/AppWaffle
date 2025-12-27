@@ -1,6 +1,6 @@
 import { use, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppConfig, DndSettings, VirtualFolderMetadata } from "@/types/app";
+import type { AppConfig, DndSettings, FolderMetadata, OrderConfig } from "@/types/app";
 import { DEFAULT_DND_SETTINGS } from "@/constants/dnd";
 import { ConfigContext, type ConfigContextValue } from "./config";
 
@@ -25,16 +25,12 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
     ...config?.dnd,
   };
 
-  const orderConfig = config?.order ?? null;
+  const orderConfig: OrderConfig | null = config?.order ?? null;
 
   // Update order in Rust memory (no disk I/O)
   // Rust saves to disk on window close for safety
-  function saveOrder(
-    main: string[],
-    folders: Record<string, string[]>,
-    virtualFolders: VirtualFolderMetadata[]
-  ) {
-    invoke("update_order", { main, folders, virtualFolders });
+  function saveOrder(main: string[], folders: FolderMetadata[]) {
+    invoke("update_order", { main, folders });
   }
 
   const value: ConfigContextValue = {

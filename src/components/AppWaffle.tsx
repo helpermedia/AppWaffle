@@ -30,11 +30,11 @@ export function AppWaffle() {
   const savedScrollTop = useRef(0);
 
   // Save scroll position when opening folder
-  function onOpenFolder(folder: Parameters<typeof handleOpenFolder>[0], isVirtual: boolean) {
+  function onOpenFolder(folder: Parameters<typeof handleOpenFolder>[0]) {
     if (scrollRef.current) {
       savedScrollTop.current = scrollRef.current.scrollTop;
     }
-    handleOpenFolder(folder, isVirtual);
+    handleOpenFolder(folder);
   }
 
   // Restore scroll position when closing folder
@@ -61,9 +61,9 @@ export function AppWaffle() {
     <div ref={scrollRef} className="w-full h-full p-20 overflow-auto">
       {openFolder && (
         <FolderModal
-          folder={openFolder.data}
+          folder={openFolder}
           savedOrder={getOpenFolderSavedOrder()}
-          onOrderChange={(newOrder) => handleFolderOrderChange(openFolder.data.id, newOrder)}
+          onOrderChange={(newOrder) => handleFolderOrderChange(openFolder.id, newOrder)}
           onClose={onCloseFolder}
         />
       )}
@@ -98,7 +98,7 @@ export function AppWaffle() {
                       item={item.data}
                       isDragActive={activeItem !== null}
                       dropAction={dropAction}
-                      onOpen={(folder) => onOpenFolder(folder, item.isVirtual)}
+                      onOpen={onOpenFolder}
                     />
                   );
                 }

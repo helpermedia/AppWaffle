@@ -2,51 +2,38 @@ import { useState } from "react";
 import { useApps } from "@/hooks/useApps";
 import { useSortableGrid } from "@/hooks/useSortableGrid";
 import { useDelayedSorting } from "@/hooks/useDelayedSorting";
-import { useVirtualFolders } from "@/hooks/useVirtualFolders";
+import { useFolders } from "@/hooks/useFolders";
 import { useFolderCreation } from "@/hooks/useFolderCreation";
 import { useConfig } from "@/hooks/useConfig";
-import { isVirtualFolderId, resolveVirtualFolderApps } from "@/utils/folderUtils";
+import { isFolderId, resolveFolderApps, convertPhysicalFolders } from "@/utils/folderUtils";
 import type { GridItem } from "@/components/items/AppItem";
 import type { GridFolder } from "@/components/items/FolderItem";
 
-// Union type for grid items
 export type GridItemUnion =
   | { type: "app"; data: GridItem }
-  | { type: "folder"; data: GridFolder; isVirtual: boolean };
-
-// Open folder state includes isVirtual flag for behavior differences
-export interface OpenFolderState {
-  data: GridFolder;
-  isVirtual: boolean;
-}
+  | { type: "folder"; data: GridFolder };
 
 export function useGrid() {
-  const { apps, folders } = useApps();
+  const { apps, folders: physicalFolders } = useApps();
   const { orderConfig, saveOrder } = useConfig();
 
-  // Virtual folders management - initialize empty, will populate from config
+  // Folders management - all folders are now unified
   const {
-    virtualFolders: localVirtualFolders,
-    setVirtualFolders,
-    createFolder: createVirtualFolder,
-  } = useVirtualFolders([]);
+    folders: localFolders,
+    setFolders,
+    createNewFolder,
+  } = useFolders([]);
 
   // Use orderConfig as source of truth until local changes happen
-  const virtualFolders = localVirtualFolders.length > 0
-    ? localVirtualFolders
-    : (orderConfig?.virtualFolders ?? []);
+  const folders = localFolders.length > 0
+    ? localFolders
+    : (orderConfig?.folders ?? []);
 
-  // Track local folder order changes (merged with orderConfig)
-  const [localFolderOrders, setLocalFolderOrders] = useState<Record<string, string[]>>({});
-  // Merge orderConfig folders with local changes
-  const folderOrders = { ...orderConfig?.folders, ...localFolderOrders };
-
-  // Open folder state
-  const [openFolder, setOpenFolder] = useState<OpenFolderState | null>(null);
+  const [openFolder, setOpenFolder] = useState<GridFolder | null>(null);
 
   // Save when order changes from reordering
   function handleMainOrderChange(newOrder: string[]) {
-    saveOrder(newOrder, folderOrders, virtualFolders);
+    saveOrder(newOrder, folders);
   }
 
   const { order, setOrder, activeId, sensors, handleDragStart, handleDragEnd, resetDrag } =
@@ -56,30 +43,26 @@ export function useGrid() {
       onOrderChange: handleMainOrderChange,
     });
 
-  // Check if active item is a folder (physical or virtual)
-  const physicalFolderPaths = new Set(folders.map((f) => f.path));
-  const virtualFolderIds = new Set(virtualFolders.map((vf) => vf.id));
-  const isDraggingFolder = activeId !== null && (
-    physicalFolderPaths.has(activeId) || virtualFolderIds.has(activeId)
-  );
+  // Check if active item is a folder
+  const folderIds = new Set(folders.map((f) => f.id));
+  const isDraggingFolder = activeId !== null && folderIds.has(activeId);
 
   // Delayed sorting strategy - skip delay when dragging folders
   const { strategy: delayedStrategy, resetDelayState } = useDelayedSorting({
     skipDelay: isDraggingFolder,
   });
 
-  // Create apps map for resolving virtual folder apps
-  // Include both top-level apps AND apps inside physical folders
+  // Create apps map for resolving folder apps
+  // Include both top-level apps AND apps from physical folders (for initial conversion)
   const appsMap = new Map([
     ...apps.map((app) => [app.path, app] as const),
-    ...folders.flatMap((folder) => folder.apps.map((app) => [app.path, app] as const)),
+    ...physicalFolders.flatMap((folder) => folder.apps.map((app) => [app.path, app] as const)),
   ]);
 
   // Build items array from order
   const items: GridItemUnion[] = (() => {
     if (!order) return [];
-    const foldersMap = new Map(folders.map((folder) => [folder.path, folder]));
-    const virtualFoldersMap = new Map(virtualFolders.map((vf) => [vf.id, vf]));
+    const foldersMap = new Map(folders.map((f) => [f.id, f]));
 
     return order
       .map((id): GridItemUnion | null => {
@@ -87,25 +70,14 @@ export function useGrid() {
         const app = appsMap.get(id);
         if (app) return { type: "app", data: { ...app, id } };
 
-        // Check if it's a physical folder
-        const folder = foldersMap.get(id);
-        if (folder) {
-          return {
-            type: "folder",
-            data: { id, name: folder.name, apps: folder.apps },
-            isVirtual: false,
-          };
-        }
-
-        // Check if it's a virtual folder
-        if (isVirtualFolderId(id)) {
-          const virtualFolder = virtualFoldersMap.get(id);
-          if (virtualFolder) {
-            const resolvedApps = resolveVirtualFolderApps(virtualFolder.appPaths, appsMap);
+        // Check if it's a folder
+        if (isFolderId(id)) {
+          const folder = foldersMap.get(id);
+          if (folder) {
+            const resolvedApps = resolveFolderApps(folder.appPaths, appsMap);
             return {
               type: "folder",
-              data: { id, name: virtualFolder.name, apps: resolvedApps },
-              isVirtual: true,
+              data: { id, name: folder.name, apps: resolvedApps },
             };
           }
         }
@@ -126,14 +98,11 @@ export function useGrid() {
   function handleCreateFolder(sourceAppId: string, targetAppId: string) {
     if (!order) return;
 
-    const newFolder = createVirtualFolder([targetAppId, sourceAppId]);
-    const resolvedApps = resolveVirtualFolderApps(newFolder.appPaths, appsMap);
+    const newFolder = createNewFolder([targetAppId, sourceAppId]);
+    const resolvedApps = resolveFolderApps(newFolder.appPaths, appsMap);
 
     // Open modal first
-    setOpenFolder({
-      data: { id: newFolder.id, name: newFolder.name, apps: resolvedApps },
-      isVirtual: true,
-    });
+    setOpenFolder({ id: newFolder.id, name: newFolder.name, apps: resolvedApps });
 
     // Update order
     const targetIndex = order.indexOf(targetAppId);
@@ -141,65 +110,34 @@ export function useGrid() {
     const insertIndex = Math.min(targetIndex, newOrder.length);
     newOrder.splice(insertIndex, 0, newFolder.id);
 
-    const updatedVirtualFolders = [...virtualFolders, newFolder];
+    const updatedFolders = [...folders, newFolder];
     setOrder(newOrder);
-    saveOrder(newOrder, folderOrders, updatedVirtualFolders);
+    saveOrder(newOrder, updatedFolders);
   }
 
   // Handle adding app to folder
   function handleAddToFolder(folderId: string, appId: string) {
     if (!order) return;
 
+    const existingFolder = folders.find((f) => f.id === folderId);
+    if (!existingFolder) return;
+
     // Remove app from main grid
     const newOrder = order.filter((id) => id !== appId);
 
-    if (isVirtualFolderId(folderId)) {
-      // Add app to existing virtual folder
-      const existingFolder = virtualFolders.find((vf) => vf.id === folderId);
-      if (!existingFolder) return;
+    // Add app to folder
+    const updatedAppPaths = [...existingFolder.appPaths, appId];
+    const updatedFolders = folders.map((f) =>
+      f.id === folderId ? { ...f, appPaths: updatedAppPaths } : f
+    );
 
-      const updatedAppPaths = [...existingFolder.appPaths, appId];
-      const updatedFolders = virtualFolders.map((vf) =>
-        vf.id === folderId ? { ...vf, appPaths: updatedAppPaths } : vf
-      );
+    // Open folder modal
+    const resolvedApps = resolveFolderApps(updatedAppPaths, appsMap);
+    setOpenFolder({ id: folderId, name: existingFolder.name, apps: resolvedApps });
 
-      // Open folder modal
-      const resolvedApps = resolveVirtualFolderApps(updatedAppPaths, appsMap);
-      setOpenFolder({
-        data: { id: folderId, name: existingFolder.name, apps: resolvedApps },
-        isVirtual: true,
-      });
-
-      setVirtualFolders(updatedFolders);
-      setOrder(newOrder);
-      saveOrder(newOrder, folderOrders, updatedFolders);
-    } else {
-      // Physical folder - convert to virtual folder with the added app
-      const physicalFolder = folders.find((f) => f.path === folderId);
-      if (!physicalFolder) return;
-
-      // Get existing app paths from physical folder + new app
-      const existingAppPaths = physicalFolder.apps.map((app) => app.path);
-      const allAppPaths = [...existingAppPaths, appId];
-      const newFolder = createVirtualFolder(allAppPaths, physicalFolder.name);
-
-      // Open folder modal
-      const resolvedApps = resolveVirtualFolderApps(allAppPaths, appsMap);
-      setOpenFolder({
-        data: { id: newFolder.id, name: newFolder.name, apps: resolvedApps },
-        isVirtual: true,
-      });
-
-      // Replace physical folder with virtual folder in order
-      const orderWithVirtualFolder = newOrder.map((id) =>
-        id === folderId ? newFolder.id : id
-      );
-
-      const updatedFolders = [...virtualFolders, newFolder];
-      setVirtualFolders(updatedFolders);
-      setOrder(orderWithVirtualFolder);
-      saveOrder(orderWithVirtualFolder, folderOrders, updatedFolders);
-    }
+    setFolders(updatedFolders);
+    setOrder(newOrder);
+    saveOrder(newOrder, updatedFolders);
   }
 
   // Folder creation hook for DnD detection
@@ -209,25 +147,34 @@ export function useGrid() {
     onAddToFolder: handleAddToFolder,
   });
 
-  // Initialize order once apps/folders load (orderConfig already loaded via context)
-  if (order === null && (apps.length > 0 || folders.length > 0)) {
-    const allPaths = new Set([
+  // Initialize order once apps/folders load
+  if (order === null && (apps.length > 0 || physicalFolders.length > 0)) {
+    // Check if we have saved folders or need to convert physical folders
+    const savedFolders = orderConfig?.folders ?? [];
+    const effectiveFolders = savedFolders.length > 0
+      ? savedFolders
+      : convertPhysicalFolders(physicalFolders);
+
+    // If we converted physical folders, save them
+    if (savedFolders.length === 0 && effectiveFolders.length > 0) {
+      setFolders(effectiveFolders);
+    }
+
+    const allIds = new Set([
       ...apps.map((a) => a.path),
-      ...folders.map((f) => f.path),
-      ...virtualFolders.map((vf) => vf.id),
+      ...effectiveFolders.map((f) => f.id),
     ]);
 
     if (orderConfig?.main && orderConfig.main.length > 0) {
       // Use saved order, filter out removed items, append new items
-      const validSavedOrder = orderConfig.main.filter((p) => allPaths.has(p));
-      const newItems = [...allPaths].filter((p) => !orderConfig.main.includes(p));
+      const validSavedOrder = orderConfig.main.filter((id) => allIds.has(id));
+      const newItems = [...allIds].filter((id) => !orderConfig.main.includes(id));
       setOrder([...validSavedOrder, ...newItems]);
     } else {
-      // First launch - use alphabetical order
+      // First launch - use default order
       setOrder([
         ...apps.map((app) => app.path),
-        ...folders.map((folder) => folder.path),
-        ...virtualFolders.map((vf) => vf.id),
+        ...effectiveFolders.map((f) => f.id),
       ]);
     }
   }
@@ -237,27 +184,18 @@ export function useGrid() {
   // Get IDs for SortableContext
   const itemIds = items.map((item) => item.data.id);
 
-  function handleOpenFolder(folder: GridFolder, isVirtual: boolean) {
-    setOpenFolder({ data: folder, isVirtual });
+  function handleOpenFolder(folder: GridFolder) {
+    setOpenFolder(folder);
   }
 
   function handleFolderOrderChange(folderId: string, newOrder: string[]) {
-    if (openFolder?.isVirtual) {
-      // Update virtual folder app order
-      const updatedVirtualFolders = virtualFolders.map((vf) =>
-        vf.id === folderId ? { ...vf, appPaths: newOrder } : vf
-      );
-      setVirtualFolders(updatedVirtualFolders);
-      if (order) {
-        saveOrder(order, folderOrders, updatedVirtualFolders);
-      }
-    } else {
-      // Physical folder order
-      const newFolderOrders = { ...folderOrders, [folderId]: newOrder };
-      setLocalFolderOrders(newFolderOrders);
-      if (order) {
-        saveOrder(order, newFolderOrders, virtualFolders);
-      }
+    // Update folder's app order
+    const updatedFolders = folders.map((f) =>
+      f.id === folderId ? { ...f, appPaths: newOrder } : f
+    );
+    setFolders(updatedFolders);
+    if (order) {
+      saveOrder(order, updatedFolders);
     }
   }
 
@@ -278,11 +216,8 @@ export function useGrid() {
   // Get saved order for open folder
   function getOpenFolderSavedOrder(): string[] | undefined {
     if (!openFolder) return undefined;
-    if (openFolder.isVirtual) {
-      const vf = virtualFolders.find((f) => f.id === openFolder.data.id);
-      return vf?.appPaths;
-    }
-    return folderOrders[openFolder.data.id];
+    const folder = folders.find((f) => f.id === openFolder.id);
+    return folder?.appPaths;
   }
 
   return {

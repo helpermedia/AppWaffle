@@ -1,6 +1,5 @@
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -40,7 +39,7 @@ pub struct AppsResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VirtualFolderMetadata {
+pub struct FolderMetadata {
     pub id: String,
     pub name: String,
     #[serde(rename = "appPaths")]
@@ -51,10 +50,10 @@ pub struct VirtualFolderMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OrderConfig {
+    #[serde(default)]
     pub main: Vec<String>,
-    pub folders: HashMap<String, Vec<String>>,
-    #[serde(default, rename = "virtualFolders")]
-    pub virtual_folders: Vec<VirtualFolderMetadata>,
+    #[serde(default)]
+    pub folders: Vec<FolderMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -275,16 +274,8 @@ async fn load_config() -> Result<AppConfig, String> {
 /// Update order in memory (called on every change from frontend)
 /// Disk write happens only on window close for safety
 #[tauri::command]
-fn update_order(
-    main: Vec<String>,
-    folders: HashMap<String, Vec<String>>,
-    virtual_folders: Vec<VirtualFolderMetadata>,
-) {
-    let order = OrderConfig {
-        main,
-        folders,
-        virtual_folders,
-    };
+fn update_order(main: Vec<String>, folders: Vec<FolderMetadata>) {
+    let order = OrderConfig { main, folders };
     *ORDER_STATE.lock().unwrap() = Some(order);
 }
 

@@ -8,7 +8,6 @@ import { DropTarget } from "@/components/items/DropTarget";
 import type { AppInfo } from "@/types/app";
 import type { DropAction } from "@/hooks/useFolderCreation";
 
-// Unified folder type - works for both physical and virtual folders
 export interface GridFolder {
   id: string;
   name: string;
