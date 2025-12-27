@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { exit } from "@tauri-apps/plugin-process";
+import { invoke } from "@tauri-apps/api/core";
 import { DndContext, DragOverlay, rectIntersection } from "@dnd-kit/core";
 import { SortableContext } from "@dnd-kit/sortable";
 import { useGrid } from "@/hooks/useGrid";
@@ -22,6 +22,7 @@ export function AppWaffle() {
     onDragEnd,
     handleOpenFolder,
     handleCloseFolder,
+    handleRenameFolder,
     handleFolderOrderChange,
     getOpenFolderSavedOrder,
   } = useGrid();
@@ -50,7 +51,7 @@ export function AppWaffle() {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape" && !openFolder) {
-        exit(0);
+        invoke("quit_app");
       }
     }
     document.addEventListener("keydown", handleKeyDown);
@@ -64,6 +65,7 @@ export function AppWaffle() {
           folder={openFolder}
           savedOrder={getOpenFolderSavedOrder()}
           onOrderChange={(newOrder) => handleFolderOrderChange(openFolder.id, newOrder)}
+          onRename={(newName) => handleRenameFolder(openFolder.id, newName)}
           onClose={onCloseFolder}
         />
       )}

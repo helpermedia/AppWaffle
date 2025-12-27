@@ -392,6 +392,15 @@ async fn show_window(window: tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+/// Quit the app, saving order state first
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    if let Err(e) = save_order_to_disk() {
+        eprintln!("Failed to save order on quit: {}", e);
+    }
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -439,7 +448,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_apps, get_app_icon, launch_app, show_window, load_config, update_order])
+        .invoke_handler(tauri::generate_handler![get_apps, get_app_icon, launch_app, show_window, load_config, update_order, quit_app])
         .on_menu_event(|app, event| {
             if event.id() == "quit" {
                 // Save order state before quitting

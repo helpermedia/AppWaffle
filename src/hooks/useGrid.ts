@@ -203,6 +203,26 @@ export function useGrid() {
     setOpenFolder(null);
   }
 
+  function handleRenameFolder(folderId: string, newName: string) {
+    // Compute updated folders from current folders (which may come from orderConfig)
+    const updatedFolders = folders.map((f) =>
+      f.id === folderId ? { ...f, name: newName } : f
+    );
+
+    // Update local state (setFolders, not renameFolderLocal which maps over empty localFolders)
+    setFolders(updatedFolders);
+
+    // Update openFolder if it's the one being renamed
+    if (openFolder?.id === folderId) {
+      setOpenFolder({ ...openFolder, name: newName });
+    }
+
+    // Persist the change
+    if (order) {
+      saveOrder(order, updatedFolders);
+    }
+  }
+
   // Combined drag end handler
   function onDragEnd(event: Parameters<typeof handleDragEnd>[0]) {
     resetDelayState();
@@ -238,6 +258,7 @@ export function useGrid() {
     // Folder handlers
     handleOpenFolder,
     handleCloseFolder,
+    handleRenameFolder,
     handleFolderOrderChange,
     getOpenFolderSavedOrder,
   };
