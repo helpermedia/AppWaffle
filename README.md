@@ -1,6 +1,8 @@
 # AppWaffle
 
-A macOS Launchpad alternative built with Tauri, React and TypeScript.
+Apple removed Launchpad in macOS 26 Tahoe. Time for a tastier way to launch your apps — served fresh in a crispy grid.
+
+AppWaffle is a modern, customizable app launcher built with Tauri, React and TypeScript. It saves your layout and works across platforms.
 
 ## Features
 
