@@ -1,7 +1,8 @@
-import { createContext, use, useEffect, useRef, type ReactNode } from "react";
+import { use, useEffect, useRef, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppConfig, DndSettings, OrderConfig, VirtualFolderMetadata } from "@/types/app";
+import type { AppConfig, DndSettings, VirtualFolderMetadata } from "@/types/app";
 import { DEFAULT_DND_SETTINGS } from "@/constants/dnd";
+import { ConfigContext, type ConfigContextValue } from "./config";
 
 // Start loading config immediately at module load (parallel with app loading)
 const configPromise: Promise<AppConfig | null> = invoke<AppConfig>("load_config")
@@ -10,23 +11,6 @@ const configPromise: Promise<AppConfig | null> = invoke<AppConfig>("load_config"
     console.error("Failed to load config:", e);
     return null;
   });
-
-interface ConfigContextValue {
-  // DnD settings
-  dnd: DndSettings;
-
-  // Order config (for reading initial state)
-  orderConfig: OrderConfig | null;
-
-  // Persistence
-  saveOrder: (
-    main: string[],
-    folders: Record<string, string[]>,
-    virtualFolders: VirtualFolderMetadata[]
-  ) => void;
-}
-
-const ConfigContext = createContext<ConfigContextValue | null>(null);
 
 const DEBOUNCE_MS = 500;
 
@@ -83,16 +67,4 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
       {children}
     </ConfigContext>
   );
-}
-
-export function useConfig(): ConfigContextValue {
-  const context = use(ConfigContext);
-  if (!context) {
-    throw new Error("useConfig must be used within ConfigProvider");
-  }
-  return context;
-}
-
-export function useDndSettings(): DndSettings {
-  return useConfig().dnd;
 }

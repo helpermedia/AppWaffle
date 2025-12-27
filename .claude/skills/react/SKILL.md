@@ -543,10 +543,33 @@ Full support for custom elements:
 
 ---
 
+## Code Quality
+
+### Never Use `eslint-disable` Comments
+
+Don't suppress linter warnings with comments like `// eslint-disable-next-line`. Fix the underlying issue instead.
+
+**If you encounter a linter warning:**
+1. Understand why the rule exists
+2. Refactor the code to satisfy the rule
+3. If the rule is fundamentally wrong for the project, disable it in the ESLint config (not inline)
+
+```tsx
+// ❌ Don't suppress warnings inline
+// eslint-disable-next-line react-hooks/exhaustive-deps
+useEffect(() => { ... }, []);
+
+// ✅ Fix the actual issue or configure ESLint properly
+useEffect(() => { ... }, [dependency]);
+```
+
+---
+
 ## Code Review Checklist
 
 When reviewing React code:
 
+- [ ] No `eslint-disable` comments — fix issues properly
 - [ ] No premature `React.memo`, `useMemo`, `useCallback`
 - [ ] Every `useEffect` is justified (syncing with external systems only)
 - [ ] Data fetching uses SWR (not `useEffect`)

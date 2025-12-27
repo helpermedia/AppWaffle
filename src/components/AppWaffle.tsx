@@ -7,7 +7,7 @@ import { useSortableGrid } from "@/hooks/useSortableGrid";
 import { useDelayedSorting } from "@/hooks/useDelayedSorting";
 import { useVirtualFolders } from "@/hooks/useVirtualFolders";
 import { useFolderCreation } from "@/hooks/useFolderCreation";
-import { useConfig } from "@/contexts/ConfigContext";
+import { useConfig } from "@/hooks/useConfig";
 import { isVirtualFolderId, resolveVirtualFolderApps } from "@/utils/folderUtils";
 import { AppItem, type GridItem } from "@/components/items/AppItem";
 import { AppItemOverlay } from "@/components/items/AppItemOverlay";

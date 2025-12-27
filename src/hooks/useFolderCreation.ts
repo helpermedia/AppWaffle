@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import type { DragOverEvent, DragEndEvent } from "@dnd-kit/core";
-import { useDndSettings } from "@/contexts/ConfigContext";
+import { useDndSettings } from "@/hooks/useConfig";
 
 export type DropAction = "create-folder" | "add-to-folder" | null;
 

@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { rectSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
-import { useDndSettings } from "@/contexts/ConfigContext";
+import { useDndSettings } from "@/hooks/useConfig";
 
 interface HoverState {
   targetIndex: number | null;

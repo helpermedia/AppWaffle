@@ -304,7 +304,7 @@ Default breakpoints (mobile-first):
 
 ```tsx
 {/* One-off values */}
-<div className="w-[327px] h-[calc(100vh-4rem)]">
+<div className="w-[50vw] h-[calc(100vh-4rem)]">
 <div className="bg-[#1a1a2e] text-[--brand-color]">
 <div className="grid-cols-[1fr_auto_2fr]">
 ```
