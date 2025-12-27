@@ -45,8 +45,10 @@ export function AppItem({
         !isDragging && isDragActive && "transition-transform duration-200"
       )}
     >
-      <DropTarget action={dropAction ?? null} />
-      <Icon icon={item.icon} alt={item.name} {...attributes} {...listeners} />
+      <div className="relative">
+        <DropTarget action={dropAction ?? null} />
+        <Icon icon={item.icon} alt={item.name} {...attributes} {...listeners} />
+      </div>
       <Label>{item.name}</Label>
     </Container>
   );

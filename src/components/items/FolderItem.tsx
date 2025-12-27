@@ -74,8 +74,8 @@ export function FolderItem({
         !isDragging && isDragActive && "transition-transform duration-200"
       )}
     >
-      <DropTarget action={dropAction ?? null} />
-      <div onClick={handleClick} {...attributes} {...listeners}>
+      <div className="relative" onClick={handleClick} {...attributes} {...listeners}>
+        <DropTarget action={dropAction ?? null} />
         <FolderPreview apps={item.apps} />
       </div>
       <Label>{item.name}</Label>
