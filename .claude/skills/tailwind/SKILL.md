@@ -1,6 +1,6 @@
 ---
 name: tailwind
-description: Tailwind CSS v4 best practices, CSS-first configuration, and modern patterns. Use when writing styles, configuring themes, or migrating from v3.
+description: Tailwind CSS v4 best practices, CSS-first configuration and modern patterns. Use when writing styles, configuring themes or migrating from v3.
 ---
 
 # Tailwind CSS v4 Best Practices

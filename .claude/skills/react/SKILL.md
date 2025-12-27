@@ -1,6 +1,6 @@
 ---
 name: react
-description: React 19 best practices, patterns, and guidance. Use when writing components, hooks, managing state, handling async operations, or reviewing React code.
+description: React 19 best practices, hooks, state management and data fetching. Use when writing components, hooks, managing state, handling async operations or reviewing React code.
 ---
 
 # React 19 Best Practices

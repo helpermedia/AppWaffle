@@ -8,16 +8,15 @@ This project has custom skills for in-depth guidance:
 
 | Skill | Description |
 |-------|-------------|
-| `/react` | React 19 best practices, hooks, patterns, and migration guide |
-| `/tailwind` | Tailwind CSS v4 best practices, configuration, and patterns |
-| `/dnd` | *(coming soon)* @dnd-kit drag-and-drop patterns |
-| `/rust` | *(coming soon)* Tauri/Rust backend patterns |
+| `/react` | React 19 best practices, hooks, state management and data fetching |
+| `/tailwind` | Tailwind CSS v4 best practices, configuration and patterns |
+| `/rust` | Tauri v2 and Rust backend patterns, commands, state, IPC and security |
 
 Use these skills for detailed code examples and comprehensive guidance.
 
 ## Project Overview
 
-AppWaffle is a macOS Launchpad alternative built with Tauri, React 19, and TypeScript. It provides a full-screen app launcher with vibrancy blur effect, drag-and-drop reordering, and folder support.
+AppWaffle is a macOS Launchpad alternative built with Tauri, React 19 and TypeScript. It provides a full-screen app launcher with vibrancy blur effect, drag-and-drop reordering and folder support.
 
 ## Tech Stack
 
@@ -69,7 +68,7 @@ This project uses React 19. Key principles:
 - **Simplified patterns**: `ref` as prop (no `forwardRef`), `<Context value="">` syntax
 - **Local state first**: Only lift state or use context when truly needed
 
-For detailed patterns, code examples, and migration guide, use the `/react` skill.
+For detailed patterns and code examples, use the `/react` skill.
 
 ## Testing
 
