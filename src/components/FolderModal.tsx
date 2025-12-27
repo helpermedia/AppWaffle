@@ -1,20 +1,25 @@
 import { useState, useEffect, useRef } from "react";
 import { DndContext, DragOverlay, closestCenter } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
-import type { FolderInfo } from "@/types/app";
 import { AppItem, type GridItem } from "@/components/items/AppItem";
 import { AppItemOverlay } from "@/components/items/AppItemOverlay";
 import { useSortableGrid } from "@/hooks/useSortableGrid";
+import { type GridFolder } from "@/components/items/FolderItem";
 import { cn } from "@/utils/cn";
 
 interface FolderModalProps {
-  folder: FolderInfo;
+  folder: GridFolder;
   savedOrder?: string[];
   onOrderChange?: (newOrder: string[]) => void;
   onClose: () => void;
 }
 
-export function FolderModal({ folder, savedOrder, onOrderChange, onClose }: FolderModalProps) {
+export function FolderModal({
+  folder,
+  savedOrder,
+  onOrderChange,
+  onClose,
+}: FolderModalProps) {
   // Use saved order if available, otherwise use folder.apps order
   const defaultOrder = folder.apps.map((app) => app.path);
   const initialOrder = savedOrder && savedOrder.length > 0 ? savedOrder : defaultOrder;

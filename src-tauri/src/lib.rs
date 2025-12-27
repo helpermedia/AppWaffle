@@ -35,10 +35,22 @@ pub struct AppsResponse {
     pub folders: Vec<FolderInfo>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VirtualFolderMetadata {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "appPaths")]
+    pub app_paths: Vec<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OrderConfig {
     pub main: Vec<String>,
     pub folders: HashMap<String, Vec<String>>,
+    #[serde(default, rename = "virtualFolders")]
+    pub virtual_folders: Vec<VirtualFolderMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -258,7 +270,11 @@ async fn load_config() -> Result<AppConfig, String> {
 
 /// Save order configuration to disk
 #[tauri::command]
-async fn save_order(main: Vec<String>, folders: HashMap<String, Vec<String>>) -> Result<(), String> {
+async fn save_order(
+    main: Vec<String>,
+    folders: HashMap<String, Vec<String>>,
+    virtual_folders: Vec<VirtualFolderMetadata>,
+) -> Result<(), String> {
     let config_dir = get_config_dir()
         .ok_or_else(|| "Could not determine config directory".to_string())?;
 
@@ -267,7 +283,11 @@ async fn save_order(main: Vec<String>, folders: HashMap<String, Vec<String>>) ->
 
     let config = AppConfig {
         version: 1,
-        order: OrderConfig { main, folders },
+        order: OrderConfig {
+            main,
+            folders,
+            virtual_folders,
+        },
     };
 
     let config_path = get_config_path().unwrap();

@@ -44,6 +44,56 @@ function Component({ data }) {
 }
 ```
 
+### 2. Think Hard Before Using `useEffect`
+
+Every `useEffect` should be questioned. Most uses are unnecessary in React 19.
+
+**Before adding `useEffect`, ask:**
+1. Is this data fetching? → Use `use()` + Suspense instead
+2. Is this derived from props/state? → Compute during render instead
+3. Is this responding to user action? → Handle in event handler instead
+4. Is this synchronizing with external system? → This is a valid use case
+
+**Valid `useEffect` uses:**
+- Event listeners (window, document, external elements)
+- Subscriptions (WebSocket, external stores)
+- Manual DOM manipulation (focus, scroll, measure)
+- Third-party library integration
+- Cleanup on unmount
+
+**Invalid `useEffect` uses (anti-patterns):**
+- Data fetching → `use()` + Suspense
+- Transforming data → compute in render
+- Resetting state on prop change → use `key` prop
+- Notifying parent of state change → call in event handler
+- "Initializing" something once → module-level or ref
+
+```tsx
+// ❌ Don't: Derived state in useEffect
+const [fullName, setFullName] = useState('');
+useEffect(() => {
+  setFullName(`${firstName} ${lastName}`);
+}, [firstName, lastName]);
+
+// ✅ Do: Compute during render
+const fullName = `${firstName} ${lastName}`;
+
+// ❌ Don't: Reset state on prop change
+useEffect(() => {
+  setSelection(null);
+}, [items]);
+
+// ✅ Do: Use key to reset component
+<ItemList items={items} key={listId} />
+
+// ✅ Valid: External event listener
+useEffect(() => {
+  const handleKeyDown = (e) => { /* ... */ };
+  document.addEventListener('keydown', handleKeyDown);
+  return () => document.removeEventListener('keydown', handleKeyDown);
+}, []);
+```
+
 ---
 
 ## New Hooks
@@ -466,6 +516,7 @@ Full support for custom elements:
 When reviewing React code:
 
 - [ ] No unnecessary `React.memo`, `useMemo`, `useCallback`
+- [ ] Every `useEffect` is justified (not for fetching, derived state, or event responses)
 - [ ] No `useEffect` for data fetching — use `use()` + Suspense
 - [ ] Using appropriate new hooks where beneficial
 - [ ] Actions used for async mutations
