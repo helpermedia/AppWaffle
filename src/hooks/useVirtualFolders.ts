@@ -6,11 +6,7 @@ interface UseVirtualFoldersReturn {
   virtualFolders: VirtualFolderMetadata[];
   setVirtualFolders: React.Dispatch<React.SetStateAction<VirtualFolderMetadata[]>>;
   createFolder: (appPaths: string[], name?: string) => VirtualFolderMetadata;
-  addToFolder: (folderId: string, appPath: string) => void;
-  removeFromFolder: (folderId: string, appPath: string) => void;
-  deleteFolder: (folderId: string) => void;
   renameFolder: (folderId: string, name: string) => void;
-  getFolder: (folderId: string) => VirtualFolderMetadata | undefined;
 }
 
 export function useVirtualFolders(
@@ -24,37 +20,6 @@ export function useVirtualFolders(
     return newFolder;
   }
 
-  function addToFolder(folderId: string, appPath: string) {
-    if (!isVirtualFolderId(folderId)) return;
-
-    setVirtualFolders((prev) =>
-      prev.map((folder) =>
-        folder.id === folderId && !folder.appPaths.includes(appPath)
-          ? { ...folder, appPaths: [...folder.appPaths, appPath] }
-          : folder
-      )
-    );
-  }
-
-  function removeFromFolder(folderId: string, appPath: string) {
-    if (!isVirtualFolderId(folderId)) return;
-
-    setVirtualFolders((prev) => {
-      const updated = prev.map((folder) =>
-        folder.id === folderId
-          ? { ...folder, appPaths: folder.appPaths.filter((p) => p !== appPath) }
-          : folder
-      );
-      // Remove empty folders
-      return updated.filter((folder) => folder.appPaths.length > 0);
-    });
-  }
-
-  function deleteFolder(folderId: string) {
-    if (!isVirtualFolderId(folderId)) return;
-    setVirtualFolders((prev) => prev.filter((folder) => folder.id !== folderId));
-  }
-
   function renameFolder(folderId: string, name: string) {
     if (!isVirtualFolderId(folderId)) return;
 
@@ -65,18 +30,10 @@ export function useVirtualFolders(
     );
   }
 
-  function getFolder(folderId: string): VirtualFolderMetadata | undefined {
-    return virtualFolders.find((folder) => folder.id === folderId);
-  }
-
   return {
     virtualFolders,
     setVirtualFolders,
     createFolder,
-    addToFolder,
-    removeFromFolder,
-    deleteFolder,
     renameFolder,
-    getFolder,
   };
 }

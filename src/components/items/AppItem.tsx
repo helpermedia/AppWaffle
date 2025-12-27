@@ -28,8 +28,10 @@ export function AppItem({
       },
     });
 
+  // Don't apply transform when this item is the folder creation target
+  // This keeps the icon in place while the ring is showing
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: dropAction === "create-folder" ? undefined : CSS.Transform.toString(transform),
     transition,
   };
 

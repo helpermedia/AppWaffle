@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import type { DragOverEvent, DragEndEvent } from "@dnd-kit/core";
 
 export type DropAction = "create-folder" | "add-to-folder" | null;
@@ -9,9 +9,13 @@ interface DropTargetState {
 }
 
 interface UseFolderCreationOptions {
-  getItemType: (id: string) => "app" | "folder" | "virtual-folder" | null;
+  getItemType: (id: string) => "app" | "folder" | null;
   onCreateFolder: (sourceAppId: string, targetAppId: string) => void;
   onAddToFolder: (folderId: string, appId: string) => void;
+  /** Dwell time in ms before folder creation activates (default: 800) */
+  folderCreationDelay?: number;
+  /** Distance in pixels that resets the dwell timer (default: 10) */
+  motionThreshold?: number;
 }
 
 interface UseFolderCreationReturn {
@@ -24,43 +28,108 @@ export function useFolderCreation({
   getItemType,
   onCreateFolder,
   onAddToFolder,
+  folderCreationDelay = 800,
+  motionThreshold = 10,
 }: UseFolderCreationOptions): UseFolderCreationReturn {
   const [dropTarget, setDropTarget] = useState<DropTargetState | null>(null);
+
+  // Track hover state for folder creation dwell time with motion detection
+  const hoverRef = useRef<{
+    id: string;
+    timerId: ReturnType<typeof setTimeout>;
+    lastX: number;
+    lastY: number;
+  } | null>(null);
+
+  function clearHoverTimer() {
+    if (hoverRef.current) {
+      clearTimeout(hoverRef.current.timerId);
+      hoverRef.current = null;
+    }
+  }
+
+  function getDistance(x1: number, y1: number, x2: number, y2: number): number {
+    return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+  }
 
   function handleDragOver(event: DragOverEvent) {
     const { active, over } = event;
 
     if (!over || active.id === over.id) {
+      clearHoverTimer();
       setDropTarget(null);
       return;
     }
 
+    const overId = String(over.id);
     const activeType = getItemType(String(active.id));
-    const overType = getItemType(String(over.id));
+    const overType = getItemType(overId);
+
+    // Get current drag position
+    const rect = active.rect.current.translated;
+    const currentX = rect?.left ?? 0;
+    const currentY = rect?.top ?? 0;
 
     // Only apps can be dragged to create/add to folders
     if (activeType !== "app") {
+      clearHoverTimer();
       setDropTarget(null);
       return;
     }
 
-    // App dropped on app → create folder
+    // App over folder → add to folder (immediate feedback)
+    if (overType === "folder") {
+      clearHoverTimer();
+      setDropTarget({ id: overId, action: "add-to-folder" });
+      return;
+    }
+
+    // App over app → create folder (with dwell time + motion detection)
     if (overType === "app") {
-      setDropTarget({ id: String(over.id), action: "create-folder" });
+      const hover = hoverRef.current;
+
+      // Check if we're hovering over the same item
+      if (hover?.id === overId) {
+        // Check if cursor moved beyond threshold - reset timer if so
+        const distance = getDistance(currentX, currentY, hover.lastX, hover.lastY);
+        if (distance > motionThreshold) {
+          // Motion detected - restart timer from current position
+          clearTimeout(hover.timerId);
+          const timerId = setTimeout(() => {
+            setDropTarget({ id: overId, action: "create-folder" });
+            hoverRef.current = null;
+          }, folderCreationDelay);
+          hoverRef.current = { id: overId, timerId, lastX: currentX, lastY: currentY };
+        }
+        // If within threshold, let existing timer continue
+        return;
+      }
+
+      // New target - clear any existing timer and start fresh
+      clearHoverTimer();
+
+      // Start dwell timer for folder creation
+      const timerId = setTimeout(() => {
+        setDropTarget({ id: overId, action: "create-folder" });
+        hoverRef.current = null;
+      }, folderCreationDelay);
+
+      hoverRef.current = { id: overId, timerId, lastX: currentX, lastY: currentY };
       return;
     }
 
-    // App dropped on folder → add to folder
-    if (overType === "folder" || overType === "virtual-folder") {
-      setDropTarget({ id: String(over.id), action: "add-to-folder" });
-      return;
-    }
-
+    clearHoverTimer();
     setDropTarget(null);
   }
 
   function handleDragEnd(event: DragEndEvent, defaultHandler: () => void) {
     const { active, over } = event;
+
+    // Clear any pending dwell timer
+    clearHoverTimer();
+
+    // Capture current drop target before clearing
+    const currentDropTarget = dropTarget;
     setDropTarget(null);
 
     if (!over || active.id === over.id) {
@@ -70,14 +139,22 @@ export function useFolderCreation({
     const activeType = getItemType(String(active.id));
     const overType = getItemType(String(over.id));
 
-    // Handle folder creation: app dropped on app
+    // Handle folder creation: only if dwell time passed AND we're still over the same target
     if (activeType === "app" && overType === "app") {
-      onCreateFolder(String(active.id), String(over.id));
+      if (
+        currentDropTarget?.action === "create-folder" &&
+        currentDropTarget.id === String(over.id)
+      ) {
+        onCreateFolder(String(active.id), String(over.id));
+      } else {
+        // Dwell time didn't pass or target changed, treat as reorder
+        defaultHandler();
+      }
       return;
     }
 
     // Handle add to folder: app dropped on folder
-    if (activeType === "app" && (overType === "folder" || overType === "virtual-folder")) {
+    if (activeType === "app" && overType === "folder") {
       onAddToFolder(String(over.id), String(active.id));
       return;
     }

@@ -18,25 +18,27 @@ Use this skill when:
 
 ## Core Principles
 
-### 1. Automatic Memoization (React Compiler)
+### 1. Don't Over-Memoize
 
-The React Compiler handles memoization automatically.
+Premature memoization adds complexity without measurable benefit.
 
 **Do:**
-- Trust the compiler to optimize renders
-- Only add manual memoization after profiling shows a need
+- Write simple, readable code first
+- Only add memoization after profiling shows a real performance issue
+- Trust React's rendering — it's already fast
 
 **Don't:**
 - Wrap everything in `React.memo`
 - Add `useMemo`/`useCallback` by default
+- Optimize before measuring
 
 ```tsx
-// Before (React 18 habit)
+// ❌ Premature optimization
 const MemoizedComponent = React.memo(({ data }) => <div>{data}</div>);
 const memoizedValue = useMemo(() => compute(data), [data]);
 const memoizedFn = useCallback(() => doSomething(), []);
 
-// After (React 19) — just write it simply
+// ✅ Simple and readable — optimize only if profiling shows need
 function Component({ data }) {
   const value = compute(data);
   const handleClick = () => doSomething();
@@ -44,15 +46,17 @@ function Component({ data }) {
 }
 ```
 
-### 2. Think Hard Before Using `useEffect`
+> **Note:** The React Compiler (experimental, opt-in) can automate memoization, but it's not enabled by default in React 19. This project does not use it. The principle still stands: write simple code first.
 
-Every `useEffect` should be questioned. Most uses are unnecessary in React 19.
+### 2. Don't Misuse `useEffect`
+
+Most `useEffect` usage is unnecessary and indicates a design problem.
 
 **Before adding `useEffect`, ask:**
-1. Is this data fetching? → Use `use()` + Suspense instead
-2. Is this derived from props/state? → Compute during render instead
-3. Is this responding to user action? → Handle in event handler instead
-4. Is this synchronizing with external system? → This is a valid use case
+1. Is this derived from props/state? → Compute during render
+2. Is this responding to user action? → Handle in event handler
+3. Is this data fetching? → Use SWR or similar
+4. Is this synchronizing with external system? → Valid use case
 
 **Valid `useEffect` uses:**
 - Event listeners (window, document, external elements)
@@ -62,11 +66,11 @@ Every `useEffect` should be questioned. Most uses are unnecessary in React 19.
 - Cleanup on unmount
 
 **Invalid `useEffect` uses (anti-patterns):**
-- Data fetching → `use()` + Suspense
 - Transforming data → compute in render
 - Resetting state on prop change → use `key` prop
 - Notifying parent of state change → call in event handler
 - "Initializing" something once → module-level or ref
+- Data fetching → SWR (see Data Fetching section)
 
 ```tsx
 // ❌ Don't: Derived state in useEffect
@@ -100,7 +104,7 @@ useEffect(() => {
 
 ### `use()` — Read Promises/Context in Render
 
-Unlike `useContext`, works with conditionals and loops.
+Unlike other hooks, works with conditionals and loops.
 
 ```tsx
 import { use } from 'react';
@@ -118,6 +122,8 @@ function Comments({ commentsPromise }) {
   <Comments commentsPromise={fetchComments()} />
 </Suspense>
 ```
+
+> **Note:** `use()` with Suspense works best when a framework manages the promise lifecycle. For client-side SPAs, see the Data Fetching section for practical patterns.
 
 ### `useOptimistic()` — Optimistic UI Updates
 
@@ -211,10 +217,10 @@ function SubmitButton() {
 
 ### With `useTransition`
 
-For non-blocking async updates:
+For non-blocking async updates. React 19 supports async functions in `startTransition`:
 
 ```tsx
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 
 function SearchResults() {
   const [query, setQuery] = useState('');
@@ -245,7 +251,7 @@ Pass async functions directly to forms:
 
 ```tsx
 async function createPost(formData) {
-  'use server';  // For Server Actions
+  'use server';  // For Server Actions (RSC frameworks)
   await db.posts.create({ title: formData.get('title') });
 }
 
@@ -259,78 +265,104 @@ async function createPost(formData) {
 
 ## Data Fetching
 
-### Don't Use `useEffect` for Data Fetching
+### For Client-Side SPAs: Use SWR
 
-`useEffect` for data fetching is a React 18 anti-pattern. It causes:
-- Waterfalls (fetch after render)
-- Race conditions
-- No Suspense integration
-- Boilerplate for loading/error states
-
-### Use `use()` + Suspense Instead
+For Tauri/Vite apps without RSC, SWR handles the hard parts:
 
 ```tsx
-// ❌ Don't: useEffect for fetching
+import useSWR from 'swr';
+
+const fetcher = (url) => fetch(url).then(r => r.json());
+
 function UserProfile({ userId }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { data, error, isLoading, mutate } = useSWR(
+    `/api/users/${userId}`,
+    fetcher
+  );
 
-  useEffect(() => {
-    setLoading(true);
-    fetchUser(userId).then(setUser).finally(() => setLoading(false));
-  }, [userId]);
-
-  if (loading) return <Spinner />;
-  return <div>{user.name}</div>;
+  if (isLoading) return <Spinner />;
+  if (error) return <Error message={error.message} />;
+  return <div>{data.name}</div>;
 }
-
-// ✅ Do: use() with Suspense
-function UserProfile({ userPromise }) {
-  const user = use(userPromise);
-  return <div>{user.name}</div>;
-}
-
-// Wrap in Suspense
-<Suspense fallback={<Spinner />}>
-  <UserProfile userPromise={fetchUser(userId)} />
-</Suspense>
 ```
 
-### Start Fetching Early (Module-Level)
+**What SWR provides:**
+- Automatic caching and deduplication
+- Revalidation on focus/reconnect
+- Cache invalidation via `mutate()`
+- Error retry with exponential backoff
+- Request deduplication
+- Optimistic updates
 
-For data needed at app startup, start fetching immediately:
+### For Tauri Commands
+
+Wrap Tauri's invoke in SWR:
 
 ```tsx
-// api.ts — fetch starts when module is imported
-let dataPromise: Promise<Data> | null = null;
+import useSWR from 'swr';
+import { invoke } from '@tauri-apps/api/core';
 
-export function getDataPromise(): Promise<Data> {
-  if (!dataPromise) {
-    dataPromise = fetch('/api/data').then(r => r.json());
-  }
-  return dataPromise;
+function useApps() {
+  return useSWR('apps', () => invoke<App[]>('get_applications'));
 }
 
-// Start immediately
-getDataPromise();
+function AppGrid() {
+  const { data: apps, isLoading } = useApps();
+  // ...
+}
+```
 
-// Component.tsx
-function Component() {
-  const data = use(getDataPromise());
+### When `use()` + Suspense Makes Sense
+
+The `use()` hook with Suspense is ideal when:
+- A framework manages promise lifecycle (Next.js, Remix with RSC)
+- Data is passed as a promise prop from a parent
+- You want streaming/progressive rendering
+
+```tsx
+// Parent creates the promise
+const dataPromise = fetchData();
+
+// Child consumes with Suspense
+<Suspense fallback={<Loading />}>
+  <DataDisplay dataPromise={dataPromise} />
+</Suspense>
+
+function DataDisplay({ dataPromise }) {
+  const data = use(dataPromise);
   return <div>{data.value}</div>;
 }
 ```
 
-This pattern ensures:
-- Fetching runs parallel with other initialization
-- No wasted renders waiting for data
-- Clean separation of data fetching from UI
+### Avoid: Naive Module-Level Singletons
+
+```tsx
+// ⚠️ Problematic pattern
+let dataPromise = null;
+
+export function getDataPromise() {
+  if (!dataPromise) {
+    dataPromise = fetch('/api/data').then(r => r.json());
+  }
+  return dataPromise;  // Cached forever!
+}
+```
+
+**Problems with this pattern:**
+- No cache invalidation — data is stale forever
+- No error recovery — failed promise stays failed
+- No refetch on param changes
+- No AbortController for cleanup
+
+Only use module-level fetches for truly static data (config loaded once at startup).
 
 ---
 
 ## Simplified Patterns
 
 ### Refs as Props (No `forwardRef`)
+
+React 19 allows `ref` as a regular prop:
 
 ```tsx
 // Before (React 18)
@@ -448,7 +480,7 @@ function App() {
 | Shared between siblings | Lift to nearest common parent |
 | App-wide (theme, auth, locale) | Context |
 | Complex state logic | `useReducer` |
-| Async data | `use()` + Suspense |
+| Remote/async data | SWR |
 | Optimistic updates | `useOptimistic` |
 
 **Avoid:**
@@ -515,13 +547,13 @@ Full support for custom elements:
 
 When reviewing React code:
 
-- [ ] No unnecessary `React.memo`, `useMemo`, `useCallback`
-- [ ] Every `useEffect` is justified (not for fetching, derived state, or event responses)
-- [ ] No `useEffect` for data fetching — use `use()` + Suspense
-- [ ] Using appropriate new hooks where beneficial
+- [ ] No premature `React.memo`, `useMemo`, `useCallback`
+- [ ] Every `useEffect` is justified (syncing with external systems only)
+- [ ] Data fetching uses SWR (not `useEffect`)
+- [ ] Using appropriate React 19 hooks where beneficial
 - [ ] Actions used for async mutations
 - [ ] State kept local where possible
-- [ ] Refs passed as props (no `forwardRef`)
+- [ ] Refs passed as props (no `forwardRef` needed)
 - [ ] Context used only for truly global state
 - [ ] Suspense boundaries for async loading
 - [ ] `startTransition` for non-urgent updates

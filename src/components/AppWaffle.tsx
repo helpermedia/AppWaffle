@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { exit } from "@tauri-apps/plugin-process";
-import { DndContext, DragOverlay, closestCenter } from "@dnd-kit/core";
-import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
+import { DndContext, DragOverlay, rectIntersection } from "@dnd-kit/core";
+import { SortableContext } from "@dnd-kit/sortable";
 import { useApps } from "@/hooks/useApps";
 import { useSortableGrid } from "@/hooks/useSortableGrid";
+import { useDelayedSorting } from "@/hooks/useDelayedSorting";
 import { useOrderPersistence } from "@/hooks/useOrderPersistence";
 import { useVirtualFolders } from "@/hooks/useVirtualFolders";
 import { useFolderCreation } from "@/hooks/useFolderCreation";
@@ -33,7 +34,6 @@ export function AppWaffle() {
     virtualFolders: localVirtualFolders,
     setVirtualFolders,
     createFolder: createVirtualFolder,
-    addToFolder: addToVirtualFolder,
   } = useVirtualFolders([]);
 
   // Use config as source of truth until local changes happen
@@ -51,19 +51,26 @@ export function AppWaffle() {
     saveOrder(newOrder, folderOrders, virtualFolders);
   }
 
-  const { order, setOrder, activeId, sensors, handleDragStart, handleDragEnd } =
+  const { order, setOrder, activeId, sensors, handleDragStart, handleDragEnd, resetDrag } =
     useSortableGrid({
       initialOrder: null,
       enableKeyboard: true,
       onOrderChange: handleMainOrderChange,
     });
 
+  // Delayed sorting strategy to prevent items from shifting too fast
+  const { strategy: delayedStrategy, resetDelayState } = useDelayedSorting({ delay: 150 });
+
   const [openFolder, setOpenFolder] = useState<OpenFolderState | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const savedScrollTop = useRef(0);
 
   // Create apps map for resolving virtual folder apps
-  const appsMap = new Map(apps.map((app) => [app.path, app]));
+  // Include both top-level apps AND apps inside physical folders
+  const appsMap = new Map([
+    ...apps.map((app) => [app.path, app] as const),
+    ...folders.flatMap((folder) => folder.apps.map((app) => [app.path, app] as const)),
+  ]);
 
   // Build items array from order
   const items: GridItemUnion[] = (() => {
@@ -106,11 +113,10 @@ export function AppWaffle() {
   })();
 
   // Get item type for folder creation hook
-  function getItemType(id: string): "app" | "folder" | "virtual-folder" | null {
+  function getItemType(id: string): "app" | "folder" | null {
     const item = items.find((i) => i.data.id === id);
     if (!item) return null;
-    if (item.type === "app") return "app";
-    return item.isVirtual ? "virtual-folder" : "folder";
+    return item.type;
   }
 
   // Handle folder creation (app dropped on app)
@@ -118,47 +124,79 @@ export function AppWaffle() {
     if (!order) return;
 
     const newFolder = createVirtualFolder([targetAppId, sourceAppId]);
+    const resolvedApps = resolveVirtualFolderApps(newFolder.appPaths, appsMap);
 
-    // Calculate new order once - remove both apps, insert folder at target's position
+    // Open modal first
+    setOpenFolder({
+      data: { id: newFolder.id, name: newFolder.name, apps: resolvedApps },
+      isVirtual: true,
+    });
+
+    // Update order
     const targetIndex = order.indexOf(targetAppId);
     const newOrder = order.filter((id) => id !== sourceAppId && id !== targetAppId);
     const insertIndex = Math.min(targetIndex, newOrder.length);
     newOrder.splice(insertIndex, 0, newFolder.id);
 
-    // Calculate updated virtual folders
     const updatedVirtualFolders = [...virtualFolders, newFolder];
-
-    // Update state and save (using calculated values, not stale state)
     setOrder(newOrder);
     saveOrder(newOrder, folderOrders, updatedVirtualFolders);
-
-    // Open the new folder immediately
-    const resolvedApps = resolveVirtualFolderApps(newFolder.appPaths, appsMap);
-    setOpenFolder({
-      data: { id: newFolder.id, name: newFolder.name, apps: resolvedApps },
-      isVirtual: true,
-    });
   }
 
   // Handle adding app to folder
   function handleAddToFolder(folderId: string, appId: string) {
     if (!order) return;
 
-    if (isVirtualFolderId(folderId)) {
-      // Calculate new order - remove app from main grid
-      const newOrder = order.filter((id) => id !== appId);
+    // Remove app from main grid
+    const newOrder = order.filter((id) => id !== appId);
 
-      // Calculate updated virtual folders - add app to folder
+    if (isVirtualFolderId(folderId)) {
+      // Add app to existing virtual folder
+      const existingFolder = virtualFolders.find((vf) => vf.id === folderId);
+      if (!existingFolder) return;
+
+      const updatedAppPaths = [...existingFolder.appPaths, appId];
       const updatedFolders = virtualFolders.map((vf) =>
-        vf.id === folderId ? { ...vf, appPaths: [...vf.appPaths, appId] } : vf
+        vf.id === folderId ? { ...vf, appPaths: updatedAppPaths } : vf
       );
 
-      // Update state and save
-      addToVirtualFolder(folderId, appId);
+      // Open folder modal
+      const resolvedApps = resolveVirtualFolderApps(updatedAppPaths, appsMap);
+      setOpenFolder({
+        data: { id: folderId, name: existingFolder.name, apps: resolvedApps },
+        isVirtual: true,
+      });
+
+      setVirtualFolders(updatedFolders);
       setOrder(newOrder);
       saveOrder(newOrder, folderOrders, updatedFolders);
+    } else {
+      // Physical folder - convert to virtual folder with the added app
+      const physicalFolder = folders.find((f) => f.path === folderId);
+      if (!physicalFolder) return;
+
+      // Get existing app paths from physical folder + new app
+      const existingAppPaths = physicalFolder.apps.map((app) => app.path);
+      const allAppPaths = [...existingAppPaths, appId];
+      const newFolder = createVirtualFolder(allAppPaths, physicalFolder.name);
+
+      // Open folder modal
+      const resolvedApps = resolveVirtualFolderApps(allAppPaths, appsMap);
+      setOpenFolder({
+        data: { id: newFolder.id, name: newFolder.name, apps: resolvedApps },
+        isVirtual: true,
+      });
+
+      // Replace physical folder with virtual folder in order
+      const orderWithVirtualFolder = newOrder.map((id) =>
+        id === folderId ? newFolder.id : id
+      );
+
+      const updatedFolders = [...virtualFolders, newFolder];
+      setVirtualFolders(updatedFolders);
+      setOrder(orderWithVirtualFolder);
+      saveOrder(orderWithVirtualFolder, folderOrders, updatedFolders);
     }
-    // Note: Adding to physical folders is not supported (filesystem folders)
   }
 
   // Folder creation hook for DnD detection
@@ -244,9 +282,12 @@ export function AppWaffle() {
 
   // Combined drag end handler
   function onDragEnd(event: Parameters<typeof handleDragEnd>[0]) {
+    resetDelayState();
     handleFolderDragEnd(event, () => {
       handleDragEnd(event);
     });
+    // Always reset drag state (in case folder handlers consumed the drop without calling defaultHandler)
+    resetDrag();
   }
 
   // Get saved order for open folder
@@ -273,12 +314,12 @@ export function AppWaffle() {
       <div className={openFolder ? "hidden" : undefined}>
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={rectIntersection}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={onDragEnd}
         >
-          <SortableContext items={itemIds} strategy={rectSortingStrategy}>
+          <SortableContext items={itemIds} strategy={delayedStrategy}>
             <div className="grid grid-cols-7 gap-4 place-items-center max-w-7xl mx-auto">
               {items.map((item) => {
                 const isDropTarget = dropTarget?.id === item.data.id;

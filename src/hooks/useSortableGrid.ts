@@ -22,6 +22,7 @@ interface UseSortableGridReturn {
   sensors: ReturnType<typeof useSensors>;
   handleDragStart: (event: DragStartEvent) => void;
   handleDragEnd: (event: DragEndEvent) => void;
+  resetDrag: () => void;
 }
 
 export function useSortableGrid({
@@ -70,6 +71,11 @@ export function useSortableGrid({
     }
   }
 
+  // Reset drag state without reordering (for use when other handlers consume the drop)
+  function resetDrag() {
+    setActiveId(null);
+  }
+
   return {
     order,
     setOrder,
@@ -77,5 +83,6 @@ export function useSortableGrid({
     sensors,
     handleDragStart,
     handleDragEnd,
+    resetDrag,
   };
 }
