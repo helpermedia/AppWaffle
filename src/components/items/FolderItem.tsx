@@ -19,7 +19,7 @@ export function FolderPreview({ apps }: { apps: AppInfo[] }) {
   const previewApps = apps.slice(0, 4);
 
   return (
-    <div className="w-24 h-24 bg-white/25 rounded-2xl p-2 grid grid-cols-2 grid-rows-2 gap-1">
+    <div className="w-24 h-24 bg-white/20 rounded-2xl p-2 grid grid-cols-2 grid-rows-2 gap-1 border border-white/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
       {previewApps.map((app) => (
         <img
           key={app.path}
