@@ -1,10 +1,6 @@
 import { useRef, useCallback } from "react";
 import { rectSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
-
-interface UseDelayedSortingOptions {
-  /** Delay in ms before items shift (default: 200) */
-  delay?: number;
-}
+import { useDndSettings } from "@/contexts/ConfigContext";
 
 interface HoverState {
   targetIndex: number | null;
@@ -16,9 +12,8 @@ interface HoverState {
  * Creates a sorting strategy that delays item shifting until
  * the dragged item has been over a position for the specified delay.
  */
-export function useDelayedSorting({
-  delay = 200,
-}: UseDelayedSortingOptions = {}) {
+export function useDelayedSorting() {
+  const { sortingDelay } = useDndSettings();
   const hoverStateRef = useRef<HoverState>({
     targetIndex: null,
     startTime: 0,
@@ -32,6 +27,18 @@ export function useDelayedSorting({
       const now = Date.now();
       const state = hoverStateRef.current;
 
+      // If hovering over original position, clear confirmed index
+      // This allows items to snap back when user returns to start
+      if (overIndex === activeIndex) {
+        confirmedIndexRef.current = null;
+        hoverStateRef.current = {
+          targetIndex: overIndex,
+          startTime: now,
+          confirmed: false,
+        };
+        return null;
+      }
+
       // If overIndex changed, reset the timer
       if (overIndex !== state.targetIndex) {
         hoverStateRef.current = {
@@ -39,7 +46,7 @@ export function useDelayedSorting({
           startTime: now,
           confirmed: false,
         };
-      } else if (!state.confirmed && now - state.startTime >= delay) {
+      } else if (!state.confirmed && now - state.startTime >= sortingDelay) {
         // Same target and delay passed - confirm it
         state.confirmed = true;
         confirmedIndexRef.current = overIndex;
@@ -51,7 +58,7 @@ export function useDelayedSorting({
         : confirmedIndexRef.current;
 
       // If no confirmed position yet, don't shift items
-      if (effectiveOverIndex === null || effectiveOverIndex === activeIndex) {
+      if (effectiveOverIndex === null) {
         return null;
       }
 
@@ -64,7 +71,7 @@ export function useDelayedSorting({
         overIndex: effectiveOverIndex,
       });
     },
-    [delay]
+    [sortingDelay]
   );
 
   // Reset state when drag ends

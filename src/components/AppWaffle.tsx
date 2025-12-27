@@ -5,9 +5,9 @@ import { SortableContext } from "@dnd-kit/sortable";
 import { useApps } from "@/hooks/useApps";
 import { useSortableGrid } from "@/hooks/useSortableGrid";
 import { useDelayedSorting } from "@/hooks/useDelayedSorting";
-import { useOrderPersistence } from "@/hooks/useOrderPersistence";
 import { useVirtualFolders } from "@/hooks/useVirtualFolders";
 import { useFolderCreation } from "@/hooks/useFolderCreation";
+import { useConfig } from "@/contexts/ConfigContext";
 import { isVirtualFolderId, resolveVirtualFolderApps } from "@/utils/folderUtils";
 import { AppItem, type GridItem } from "@/components/items/AppItem";
 import { AppItemOverlay } from "@/components/items/AppItemOverlay";
@@ -27,7 +27,7 @@ interface OpenFolderState {
 
 export function AppWaffle() {
   const { apps, folders } = useApps();
-  const { config, saveOrder } = useOrderPersistence();
+  const { orderConfig, saveOrder } = useConfig();
 
   // Virtual folders management - initialize empty, will populate from config
   const {
@@ -36,15 +36,15 @@ export function AppWaffle() {
     createFolder: createVirtualFolder,
   } = useVirtualFolders([]);
 
-  // Use config as source of truth until local changes happen
+  // Use orderConfig as source of truth until local changes happen
   const virtualFolders = localVirtualFolders.length > 0
     ? localVirtualFolders
-    : (config?.virtualFolders ?? []);
+    : (orderConfig?.virtualFolders ?? []);
 
-  // Track local folder order changes (merged with config)
+  // Track local folder order changes (merged with orderConfig)
   const [localFolderOrders, setLocalFolderOrders] = useState<Record<string, string[]>>({});
-  // Merge config folders with local changes
-  const folderOrders = { ...config?.folders, ...localFolderOrders };
+  // Merge orderConfig folders with local changes
+  const folderOrders = { ...orderConfig?.folders, ...localFolderOrders };
 
   // Save when order changes from reordering
   function handleMainOrderChange(newOrder: string[]) {
@@ -59,7 +59,7 @@ export function AppWaffle() {
     });
 
   // Delayed sorting strategy to prevent items from shifting too fast
-  const { strategy: delayedStrategy, resetDelayState } = useDelayedSorting({ delay: 150 });
+  const { strategy: delayedStrategy, resetDelayState } = useDelayedSorting();
 
   const [openFolder, setOpenFolder] = useState<OpenFolderState | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -206,7 +206,7 @@ export function AppWaffle() {
     onAddToFolder: handleAddToFolder,
   });
 
-  // Initialize order once apps/folders load (config already loaded via use())
+  // Initialize order once apps/folders load (orderConfig already loaded via context)
   if (order === null && (apps.length > 0 || folders.length > 0)) {
     const allPaths = new Set([
       ...apps.map((a) => a.path),
@@ -214,10 +214,10 @@ export function AppWaffle() {
       ...virtualFolders.map((vf) => vf.id),
     ]);
 
-    if (config?.main && config.main.length > 0) {
+    if (orderConfig?.main && orderConfig.main.length > 0) {
       // Use saved order, filter out removed items, append new items
-      const validSavedOrder = config.main.filter((p) => allPaths.has(p));
-      const newItems = [...allPaths].filter((p) => !config.main.includes(p));
+      const validSavedOrder = orderConfig.main.filter((p) => allPaths.has(p));
+      const newItems = [...allPaths].filter((p) => !orderConfig.main.includes(p));
       setOrder([...validSavedOrder, ...newItems]);
     } else {
       // First launch - use alphabetical order

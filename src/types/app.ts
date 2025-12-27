@@ -28,7 +28,17 @@ export interface OrderConfig {
   virtualFolders?: VirtualFolderMetadata[];
 }
 
+export interface DndSettings {
+  /** How long to hold still over an app before folder creation ring appears (ms) */
+  folderCreationDelay: number;
+  /** Distance that resets the folder creation timer (px) */
+  motionThreshold: number;
+  /** How long before items shift to show the new drop position (ms) */
+  sortingDelay: number;
+}
+
 export interface AppConfig {
   version: number;
   order: OrderConfig;
+  dnd?: DndSettings;
 }

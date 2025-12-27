@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import type { DragOverEvent, DragEndEvent } from "@dnd-kit/core";
+import { useDndSettings } from "@/contexts/ConfigContext";
 
 export type DropAction = "create-folder" | "add-to-folder" | null;
 
@@ -12,10 +13,6 @@ interface UseFolderCreationOptions {
   getItemType: (id: string) => "app" | "folder" | null;
   onCreateFolder: (sourceAppId: string, targetAppId: string) => void;
   onAddToFolder: (folderId: string, appId: string) => void;
-  /** Dwell time in ms before folder creation activates (default: 800) */
-  folderCreationDelay?: number;
-  /** Distance in pixels that resets the dwell timer (default: 10) */
-  motionThreshold?: number;
 }
 
 interface UseFolderCreationReturn {
@@ -28,9 +25,8 @@ export function useFolderCreation({
   getItemType,
   onCreateFolder,
   onAddToFolder,
-  folderCreationDelay = 800,
-  motionThreshold = 10,
 }: UseFolderCreationOptions): UseFolderCreationReturn {
+  const { folderCreationDelay, motionThreshold } = useDndSettings();
   const [dropTarget, setDropTarget] = useState<DropTargetState | null>(null);
 
   // Track hover state for folder creation dwell time with motion detection
@@ -93,8 +89,9 @@ export function useFolderCreation({
         // Check if cursor moved beyond threshold - reset timer if so
         const distance = getDistance(currentX, currentY, hover.lastX, hover.lastY);
         if (distance > motionThreshold) {
-          // Motion detected - restart timer from current position
+          // Motion detected - clear ring and restart timer from current position
           clearTimeout(hover.timerId);
+          setDropTarget(null);
           const timerId = setTimeout(() => {
             setDropTarget({ id: overId, action: "create-folder" });
             hoverRef.current = null;
@@ -105,8 +102,9 @@ export function useFolderCreation({
         return;
       }
 
-      // New target - clear any existing timer and start fresh
+      // New target - clear any existing timer and dropTarget, start fresh
       clearHoverTimer();
+      setDropTarget(null);
 
       // Start dwell timer for folder creation
       const timerId = setTimeout(() => {
