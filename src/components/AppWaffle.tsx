@@ -58,8 +58,17 @@ export function AppWaffle() {
       onOrderChange: handleMainOrderChange,
     });
 
-  // Delayed sorting strategy to prevent items from shifting too fast
-  const { strategy: delayedStrategy, resetDelayState } = useDelayedSorting();
+  // Check if active item is a folder (physical or virtual)
+  const physicalFolderPaths = new Set(folders.map((f) => f.path));
+  const virtualFolderIds = new Set(virtualFolders.map((vf) => vf.id));
+  const isDraggingFolder = activeId !== null && (
+    physicalFolderPaths.has(activeId) || virtualFolderIds.has(activeId)
+  );
+
+  // Delayed sorting strategy - skip delay when dragging folders
+  const { strategy: delayedStrategy, resetDelayState } = useDelayedSorting({
+    skipDelay: isDraggingFolder,
+  });
 
   const [openFolder, setOpenFolder] = useState<OpenFolderState | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);

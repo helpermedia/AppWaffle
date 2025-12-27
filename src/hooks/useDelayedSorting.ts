@@ -8,11 +8,17 @@ interface HoverState {
   confirmed: boolean;
 }
 
+interface UseDelayedSortingOptions {
+  /** Skip the delay entirely (e.g., when dragging folders) */
+  skipDelay?: boolean;
+}
+
 /**
  * Creates a sorting strategy that delays item shifting until
  * the dragged item has been over a position for the specified delay.
  */
-export function useDelayedSorting() {
+export function useDelayedSorting(options: UseDelayedSortingOptions = {}) {
+  const { skipDelay = false } = options;
   const { sortingDelay } = useDndSettings();
   const hoverStateRef = useRef<HoverState>({
     targetIndex: null,
@@ -24,6 +30,17 @@ export function useDelayedSorting() {
 
   const strategy: SortingStrategy = useCallback(
     ({ activeIndex, activeNodeRect, index, rects, overIndex }) => {
+      // Skip delay entirely - use default sorting immediately
+      if (skipDelay) {
+        return rectSortingStrategy({
+          activeIndex,
+          activeNodeRect,
+          index,
+          rects,
+          overIndex,
+        });
+      }
+
       const now = Date.now();
       const state = hoverStateRef.current;
 
@@ -71,7 +88,7 @@ export function useDelayedSorting() {
         overIndex: effectiveOverIndex,
       });
     },
-    [sortingDelay]
+    [skipDelay, sortingDelay]
   );
 
   // Reset state when drag ends
