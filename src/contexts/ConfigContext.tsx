@@ -1,4 +1,4 @@
-import { use, useEffect, useRef, type ReactNode } from "react";
+import { use, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppConfig, DndSettings, VirtualFolderMetadata } from "@/types/app";
 import { DEFAULT_DND_SETTINGS } from "@/constants/dnd";
@@ -12,15 +12,12 @@ const configPromise: Promise<AppConfig | null> = invoke<AppConfig>("load_config"
     return null;
   });
 
-const DEBOUNCE_MS = 500;
-
 interface ConfigProviderProps {
   children: ReactNode;
 }
 
 export function ConfigProvider({ children }: ConfigProviderProps) {
   const config = use(configPromise);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Merge loaded settings with defaults
   const dnd: DndSettings = {
@@ -30,31 +27,15 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
 
   const orderConfig = config?.order ?? null;
 
+  // Update order in Rust memory (no disk I/O)
+  // Rust saves to disk on window close for safety
   function saveOrder(
     main: string[],
     folders: Record<string, string[]>,
     virtualFolders: VirtualFolderMetadata[]
   ) {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    saveTimeoutRef.current = setTimeout(async () => {
-      try {
-        await invoke("save_order", { main, folders, virtualFolders });
-      } catch (e) {
-        console.error("Failed to save order:", e);
-      }
-    }, DEBOUNCE_MS);
+    invoke("update_order", { main, folders, virtualFolders });
   }
-
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const value: ConfigContextValue = {
     dnd,

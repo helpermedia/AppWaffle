@@ -4,9 +4,13 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Mutex;
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::Manager;
+use tauri::{Manager, WindowEvent};
 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+
+/// In-memory order state - updated on every change, saved to disk only on exit
+static ORDER_STATE: Mutex<Option<OrderConfig>> = Mutex::new(None);
 
 #[cfg(target_os = "macos")]
 use objc2::{msg_send, runtime::AnyObject, MainThreadMarker};
@@ -268,13 +272,29 @@ async fn load_config() -> Result<AppConfig, String> {
         .map_err(|e| format!("Failed to parse config: {}", e))
 }
 
-/// Save order configuration to disk
+/// Update order in memory (called on every change from frontend)
+/// Disk write happens only on window close for safety
 #[tauri::command]
-async fn save_order(
+fn update_order(
     main: Vec<String>,
     folders: HashMap<String, Vec<String>>,
     virtual_folders: Vec<VirtualFolderMetadata>,
-) -> Result<(), String> {
+) {
+    let order = OrderConfig {
+        main,
+        folders,
+        virtual_folders,
+    };
+    *ORDER_STATE.lock().unwrap() = Some(order);
+}
+
+/// Save in-memory order state to disk (called on window close)
+fn save_order_to_disk() -> Result<(), String> {
+    let state = ORDER_STATE.lock().unwrap();
+    let Some(order) = state.as_ref() else {
+        return Ok(()); // Nothing to save
+    };
+
     let config_dir = get_config_dir()
         .ok_or_else(|| "Could not determine config directory".to_string())?;
 
@@ -283,11 +303,7 @@ async fn save_order(
 
     let config = AppConfig {
         version: 1,
-        order: OrderConfig {
-            main,
-            folders,
-            virtual_folders,
-        },
+        order: order.clone(),
     };
 
     let config_path = get_config_path().unwrap();
@@ -432,10 +448,22 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_apps, get_app_icon, launch_app, show_window, load_config, save_order])
+        .invoke_handler(tauri::generate_handler![get_apps, get_app_icon, launch_app, show_window, load_config, update_order])
         .on_menu_event(|app, event| {
             if event.id() == "quit" {
+                // Save order state before quitting
+                if let Err(e) = save_order_to_disk() {
+                    eprintln!("Failed to save order on quit: {}", e);
+                }
                 app.exit(0);
+            }
+        })
+        .on_window_event(|_window, event| {
+            if let WindowEvent::CloseRequested { .. } = event {
+                // Save order state before window closes
+                if let Err(e) = save_order_to_disk() {
+                    eprintln!("Failed to save order on close: {}", e);
+                }
             }
         })
         .run(tauri::generate_context!())
