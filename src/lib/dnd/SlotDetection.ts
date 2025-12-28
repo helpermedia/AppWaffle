@@ -1,5 +1,10 @@
 import type { GridItem, Point } from "./types";
 
+interface SlotDetectionOptions {
+  /** Icon size in pixels for hit detection (default: 96) */
+  iconSize?: number;
+}
+
 /**
  * Grid layout metadata calculated from item positions.
  */
@@ -46,6 +51,11 @@ export class SlotDetection {
   private activeIndex: number = -1;
   private targetIndex: number = -1;
   private previousCenter: Point | null = null;
+  private iconSize: number;
+
+  constructor(options: SlotDetectionOptions = {}) {
+    this.iconSize = options.iconSize ?? 96;
+  }
 
   /**
    * Initialize with grid items at drag start.
@@ -126,7 +136,7 @@ export class SlotDetection {
    * Returns new target index if crossing detected, null otherwise.
    */
   private detectCrossing(currentCenter: Point): number | null {
-    if (!this.previousCenter) return null;
+    if (!this.previousCenter || !this.layout) return null;
 
     // Calculate movement direction
     const deltaX = currentCenter.x - this.previousCenter.x;
@@ -156,7 +166,7 @@ export class SlotDetection {
         if (crossedRight || crossedLeft) {
           // Verify we're in the same row (Y within icon size, not full item height)
           const yDistance = Math.abs(currentCenter.y - targetCenter.y);
-          if (yDistance < this.layout!.iconSize) {
+          if (yDistance < this.layout.iconSize) {
             return item.index;
           }
         }
@@ -173,7 +183,7 @@ export class SlotDetection {
         if (crossedDown || crossedUp) {
           // Verify we're in the same column (X within icon size)
           const xDistance = Math.abs(currentCenter.x - targetCenter.x);
-          if (xDistance < this.layout!.iconSize) {
+          if (xDistance < this.layout.iconSize) {
             return item.index;
           }
         }
@@ -191,10 +201,6 @@ export class SlotDetection {
     const first = items[0].rect;
     const itemWidth = first.width;
     const itemHeight = first.height;
-
-    // Icon size is 96px (w-24 in Tailwind) - used for hit detection
-    // This is smaller than the full item which includes the label
-    const iconSize = 96;
 
     // Determine columns by finding items in the first row
     let columns = 1;
@@ -228,7 +234,7 @@ export class SlotDetection {
       totalItems: items.length,
       itemWidth,
       itemHeight,
-      iconSize,
+      iconSize: this.iconSize,
       gapX,
       gapY,
       offsetX: first.left,

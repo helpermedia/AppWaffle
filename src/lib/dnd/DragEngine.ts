@@ -28,6 +28,7 @@ export class DragEngine {
   private static DEFAULTS: Required<DragOptions> = {
     activationDistance: 5,
     shiftDuration: 200,
+    iconSize: 96,
     ghostClass: "drag-ghost",
     draggingClass: "is-dragging",
   };
@@ -36,9 +37,13 @@ export class DragEngine {
     this.container = container;
     this.options = { ...DragEngine.DEFAULTS, ...options };
 
-    this.pointerTracker = new PointerTracker(container);
+    this.pointerTracker = new PointerTracker(container, {
+      activationDistance: this.options.activationDistance,
+    });
     this.ghostElement = new GhostElement({ className: this.options.ghostClass });
-    this.slotDetection = new SlotDetection();
+    this.slotDetection = new SlotDetection({
+      iconSize: this.options.iconSize,
+    });
     this.gridTransforms = new GridTransforms({
       transitionDuration: this.options.shiftDuration,
     });

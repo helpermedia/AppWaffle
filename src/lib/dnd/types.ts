@@ -66,6 +66,8 @@ export interface DragOptions {
   activationDistance?: number;
   /** Duration of shift animation in ms (default: 200) */
   shiftDuration?: number;
+  /** Icon size in pixels for hit detection (default: 96) */
+  iconSize?: number;
   /** CSS class applied to ghost element */
   ghostClass?: string;
   /** CSS class applied to item being dragged */

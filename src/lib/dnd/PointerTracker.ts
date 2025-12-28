@@ -1,5 +1,10 @@
 import type { Point } from "./types";
 
+interface PointerTrackerOptions {
+  /** Minimum pixels to move before drag starts (default: 5) */
+  activationDistance?: number;
+}
+
 /**
  * Handles low-level pointer event management.
  *
@@ -12,12 +17,11 @@ import type { Point } from "./types";
  */
 export class PointerTracker {
   private container: HTMLElement;
+  private activationDistance: number;
   private isDragging = false;
   private startPoint: Point | null = null;
   private activeElement: HTMLElement | null = null;
   private pointerId: number | null = null;
-
-  private static ACTIVATION_DISTANCE = 5; // pixels
 
   // Callbacks (set by DragEngine)
   onDragStart?: (item: HTMLElement, pointer: Point) => void;
@@ -25,8 +29,9 @@ export class PointerTracker {
   onDragEnd?: (pointer: Point) => void;
   onDragCancel?: () => void;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, options: PointerTrackerOptions = {}) {
     this.container = container;
+    this.activationDistance = options.activationDistance ?? 5;
     this.handlePointerDown = this.handlePointerDown.bind(this);
     this.handlePointerMove = this.handlePointerMove.bind(this);
     this.handlePointerUp = this.handlePointerUp.bind(this);
@@ -102,7 +107,7 @@ export class PointerTracker {
       currentPoint.y - this.startPoint.y
     );
 
-    if (distance >= PointerTracker.ACTIVATION_DISTANCE) {
+    if (distance >= this.activationDistance) {
       this.isDragging = true;
       // Prevent text selection and capture pointer now that drag has started
       e.preventDefault();

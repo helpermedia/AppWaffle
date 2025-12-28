@@ -19,6 +19,7 @@ interface TransformOptions {
 export class GridTransforms {
   private items: GridItem[] = [];
   private options: Required<TransformOptions>;
+  private originalTransitions: Map<HTMLElement, string> = new Map();
 
   private static DEFAULTS: Required<TransformOptions> = {
     itemSelector: "[data-draggable]",
@@ -33,6 +34,7 @@ export class GridTransforms {
   cachePositions(container: HTMLElement): GridItem[] {
     const elements = container.querySelectorAll(this.options.itemSelector);
     this.items = [];
+    this.originalTransitions.clear();
 
     elements.forEach((el, index) => {
       if (!(el instanceof HTMLElement)) return;
@@ -56,7 +58,10 @@ export class GridTransforms {
         rect,
       });
 
-      // Ensure items have transition set
+      // Store original transition before overwriting
+      this.originalTransitions.set(el, el.style.transition);
+
+      // Set transition for smooth shifting
       el.style.transition = `transform ${this.options.transitionDuration}ms cubic-bezier(0.2, 0, 0, 1)`;
     });
 
@@ -110,6 +115,16 @@ export class GridTransforms {
       item.element.style.transition = "none";
       item.element.style.transform = "";
     }
+
+    // Restore original transitions after a frame (allows instant reset first)
+    requestAnimationFrame(() => {
+      for (const item of this.items) {
+        const original = this.originalTransitions.get(item.element);
+        item.element.style.transition = original ?? "";
+      }
+      this.originalTransitions.clear();
+    });
+
     // Note: Don't clear items here - they may be needed by event handlers
   }
 
