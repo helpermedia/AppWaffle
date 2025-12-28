@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
-import type { DragOverEvent, DragEndEvent } from "@dnd-kit/core";
+import { useState, useRef, useEffect } from "react";
 import { useDndSettings } from "@/hooks/useConfig";
+import type { DragMoveInfo, DragEndInfo } from "@/hooks/useDragGrid";
 
 export type DropAction = "create-folder" | "add-to-folder" | null;
 
@@ -17,8 +17,8 @@ interface UseFolderCreationOptions {
 
 interface UseFolderCreationReturn {
   dropTarget: DropTargetState | null;
-  handleDragOver: (event: DragOverEvent) => void;
-  handleDragEnd: (event: DragEndEvent, defaultHandler: () => void) => void;
+  handleDragMove: (info: DragMoveInfo) => void;
+  handleDragEnd: (info: DragEndInfo, reorder: () => void) => void;
 }
 
 export function useFolderCreation({
@@ -26,16 +26,14 @@ export function useFolderCreation({
   onCreateFolder,
   onAddToFolder,
 }: UseFolderCreationOptions): UseFolderCreationReturn {
-  const { folderCreationDelay, motionThreshold } = useDndSettings();
+  const { folderCreationDelay, overlapThreshold } = useDndSettings();
   const [dropTarget, setDropTarget] = useState<DropTargetState | null>(null);
 
-  // Track hover state for folder creation dwell time with motion detection
+  // Track hover state for folder creation dwell time
   const hoverRef = useRef<{
     id: string;
     timerId: ReturnType<typeof setTimeout> | null;
-    startX: number;
-    startY: number;
-    triggered: boolean;  // True once timer completed and highlight is showing
+    triggered: boolean;
   } | null>(null);
 
   function clearHoverTimer() {
@@ -45,27 +43,27 @@ export function useFolderCreation({
     hoverRef.current = null;
   }
 
-  function getDistance(x1: number, y1: number, x2: number, y2: number): number {
-    return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-  }
+  // Cleanup timer on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      clearHoverTimer();
+    };
+  }, []);
 
-  function handleDragOver(event: DragOverEvent) {
-    const { active, over, delta } = event;
+  function handleDragMove(info: DragMoveInfo) {
+    const { activeId, overlap } = info;
 
-    if (!over || active.id === over.id) {
+    // No overlap or overlapping self
+    if (!overlap || overlap.targetId === activeId) {
       clearHoverTimer();
       setDropTarget(null);
       return;
     }
 
-    const overId = String(over.id);
-    const activeType = getItemType(String(active.id));
+    const overId = overlap.targetId;
+    const overlapRatio = overlap.ratio;
+    const activeType = getItemType(activeId);
     const overType = getItemType(overId);
-
-    // Use delta for motion detection - this actually updates during drag
-    // (activeRect positions are static and don't work)
-    const currentX = delta.x;
-    const currentY = delta.y;
 
     // Only apps can be dragged to create/add to folders
     if (activeType !== "app") {
@@ -74,46 +72,40 @@ export function useFolderCreation({
       return;
     }
 
-    // App over folder → add to folder (immediate feedback)
+    // App over folder → add to folder (only if overlap meets threshold)
     if (overType === "folder") {
-      clearHoverTimer();
-      setDropTarget({ id: overId, action: "add-to-folder" });
+      if (overlapRatio >= overlapThreshold) {
+        clearHoverTimer();
+        setDropTarget({ id: overId, action: "add-to-folder" });
+      } else {
+        clearHoverTimer();
+        setDropTarget(null);
+      }
       return;
     }
 
-    // App over app → create folder (with dwell time + motion detection)
+    // App over app → create folder (with dwell time)
+    // Only if overlap meets threshold
     if (overType === "app") {
+      if (overlapRatio < overlapThreshold) {
+        clearHoverTimer();
+        setDropTarget(null);
+        return;
+      }
+
       const hover = hoverRef.current;
 
       // Check if we're hovering over the same item
       if (hover?.id === overId) {
-        // Already triggered - just stay in triggered state while on same target
+        // Already triggered - stay in triggered state
         if (hover.triggered) {
           return;
         }
-
-        // Check drift from initial position
-        const driftDistance = getDistance(currentX, currentY, hover.startX, hover.startY);
-        if (driftDistance > motionThreshold) {
-          // Drifted too far - cancel timer and restart from current position
-          if (hover.timerId) {
-            clearTimeout(hover.timerId);
-          }
-          setDropTarget(null);
-          const timerId = setTimeout(() => {
-            setDropTarget({ id: overId, action: "create-folder" });
-            if (hoverRef.current) {
-              hoverRef.current.triggered = true;
-              hoverRef.current.timerId = null;
-            }
-          }, folderCreationDelay);
-          hoverRef.current = { id: overId, timerId, startX: currentX, startY: currentY, triggered: false };
-        }
-        // If within threshold, let existing timer continue
+        // Timer is running, let it continue
         return;
       }
 
-      // Different target or first target - clear everything and start fresh
+      // Different target or first target - start fresh
       clearHoverTimer();
       setDropTarget(null);
 
@@ -126,7 +118,7 @@ export function useFolderCreation({
         }
       }, folderCreationDelay);
 
-      hoverRef.current = { id: overId, timerId, startX: currentX, startY: currentY, triggered: false };
+      hoverRef.current = { id: overId, timerId, triggered: false };
       return;
     }
 
@@ -134,8 +126,8 @@ export function useFolderCreation({
     setDropTarget(null);
   }
 
-  function handleDragEnd(event: DragEndEvent, defaultHandler: () => void) {
-    const { active, over } = event;
+  function handleDragEnd(info: DragEndInfo, reorder: () => void) {
+    const { activeId, overId } = info;
 
     // Clear any pending dwell timer
     clearHoverTimer();
@@ -144,40 +136,40 @@ export function useFolderCreation({
     const currentDropTarget = dropTarget;
     setDropTarget(null);
 
-    if (!over || active.id === over.id) {
+    if (!overId || overId === activeId) {
       return;
     }
 
-    const activeType = getItemType(String(active.id));
-    const overType = getItemType(String(over.id));
+    const activeType = getItemType(activeId);
+    const overType = getItemType(overId);
 
     // Handle folder creation: only if dwell time passed AND we're still over the same target
     if (activeType === "app" && overType === "app") {
       if (
         currentDropTarget?.action === "create-folder" &&
-        currentDropTarget.id === String(over.id)
+        currentDropTarget.id === overId
       ) {
-        onCreateFolder(String(active.id), String(over.id));
+        onCreateFolder(activeId, overId);
       } else {
         // Dwell time didn't pass or target changed, treat as reorder
-        defaultHandler();
+        reorder();
       }
       return;
     }
 
     // Handle add to folder: app dropped on folder
     if (activeType === "app" && overType === "folder") {
-      onAddToFolder(String(over.id), String(active.id));
+      onAddToFolder(overId, activeId);
       return;
     }
 
     // Otherwise, use default reorder behavior
-    defaultHandler();
+    reorder();
   }
 
   return {
     dropTarget,
-    handleDragOver,
+    handleDragMove,
     handleDragEnd,
   };
 }

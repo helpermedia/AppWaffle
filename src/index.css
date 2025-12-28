@@ -48,3 +48,9 @@
     @apply font-sans antialiased select-none;
   }
 }
+
+/* Custom drag-and-drop styles */
+.is-dragging {
+  opacity: 0;
+  pointer-events: none;
+}

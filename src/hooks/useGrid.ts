@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useApps } from "@/hooks/useApps";
-import { useSortableGrid } from "@/hooks/useSortableGrid";
-import { useDelayedSorting } from "@/hooks/useDelayedSorting";
+import { useDragGrid } from "@/hooks/useDragGrid";
 import { useFolders } from "@/hooks/useFolders";
 import { useFolderCreation } from "@/hooks/useFolderCreation";
 import { useConfig } from "@/hooks/useConfig";
 import { isFolderId, resolveFolderApps, convertPhysicalFolders } from "@/utils/folderUtils";
 import type { GridItem } from "@/components/items/AppItem";
 import type { GridFolder } from "@/components/items/FolderItem";
+import type { DragMoveInfo, DragEndInfo } from "@/hooks/useDragGrid";
 
 export type GridItemUnion =
   | { type: "app"; data: GridItem }
@@ -31,27 +31,6 @@ export function useGrid() {
 
   const [openFolder, setOpenFolder] = useState<GridFolder | null>(null);
 
-  // Save when order changes from reordering
-  function handleMainOrderChange(newOrder: string[]) {
-    saveOrder(newOrder, folders);
-  }
-
-  const { order, setOrder, activeId, sensors, handleDragStart, handleDragEnd, resetDrag } =
-    useSortableGrid({
-      initialOrder: null,
-      enableKeyboard: true,
-      onOrderChange: handleMainOrderChange,
-    });
-
-  // Check if active item is a folder
-  const folderIds = new Set(folders.map((f) => f.id));
-  const isDraggingFolder = activeId !== null && folderIds.has(activeId);
-
-  // Delayed sorting strategy - skip delay when dragging folders
-  const { strategy: delayedStrategy, resetDelayState } = useDelayedSorting({
-    skipDelay: isDraggingFolder,
-  });
-
   // Create apps map for resolving folder apps
   // Include both top-level apps AND apps from physical folders (for initial conversion)
   const appsMap = new Map([
@@ -59,8 +38,8 @@ export function useGrid() {
     ...physicalFolders.flatMap((folder) => folder.apps.map((app) => [app.path, app] as const)),
   ]);
 
-  // Build items array from order
-  const items: GridItemUnion[] = (() => {
+  // Build items array from order (needs to be defined before useFolderCreation)
+  function buildItems(order: string[] | null): GridItemUnion[] {
     if (!order) return [];
     const foldersMap = new Map(folders.map((f) => [f.id, f]));
 
@@ -85,18 +64,19 @@ export function useGrid() {
         return null;
       })
       .filter((item): item is GridItemUnion => item !== null);
-  })();
+  }
 
   // Get item type for folder creation hook
   function getItemType(id: string): "app" | "folder" | null {
-    const item = items.find((i) => i.data.id === id);
-    if (!item) return null;
-    return item.type;
+    if (appsMap.has(id)) return "app";
+    if (isFolderId(id)) return "folder";
+    return null;
   }
 
   // Handle folder creation (app dropped on app)
   function handleCreateFolder(sourceAppId: string, targetAppId: string) {
-    if (!order) return;
+    const currentOrder = dragGrid.order;
+    if (!currentOrder) return;
 
     const newFolder = createNewFolder([targetAppId, sourceAppId]);
     const resolvedApps = resolveFolderApps(newFolder.appPaths, appsMap);
@@ -105,25 +85,26 @@ export function useGrid() {
     setOpenFolder({ id: newFolder.id, name: newFolder.name, apps: resolvedApps });
 
     // Update order
-    const targetIndex = order.indexOf(targetAppId);
-    const newOrder = order.filter((id) => id !== sourceAppId && id !== targetAppId);
+    const targetIndex = currentOrder.indexOf(targetAppId);
+    const newOrder = currentOrder.filter((id) => id !== sourceAppId && id !== targetAppId);
     const insertIndex = Math.min(targetIndex, newOrder.length);
     newOrder.splice(insertIndex, 0, newFolder.id);
 
     const updatedFolders = [...folders, newFolder];
-    setOrder(newOrder);
+    dragGrid.setOrder(newOrder);
     saveOrder(newOrder, updatedFolders);
   }
 
   // Handle adding app to folder
   function handleAddToFolder(folderId: string, appId: string) {
-    if (!order) return;
+    const currentOrder = dragGrid.order;
+    if (!currentOrder) return;
 
     const existingFolder = folders.find((f) => f.id === folderId);
     if (!existingFolder) return;
 
     // Remove app from main grid
-    const newOrder = order.filter((id) => id !== appId);
+    const newOrder = currentOrder.filter((id) => id !== appId);
 
     // Add app to folder
     const updatedAppPaths = [...existingFolder.appPaths, appId];
@@ -136,19 +117,46 @@ export function useGrid() {
     setOpenFolder({ id: folderId, name: existingFolder.name, apps: resolvedApps });
 
     setFolders(updatedFolders);
-    setOrder(newOrder);
+    dragGrid.setOrder(newOrder);
     saveOrder(newOrder, updatedFolders);
   }
 
   // Folder creation hook for DnD detection
-  const { dropTarget, handleDragOver, handleDragEnd: handleFolderDragEnd } = useFolderCreation({
+  const {
+    dropTarget,
+    handleDragMove: handleFolderDragMove,
+    handleDragEnd: handleFolderDragEnd,
+  } = useFolderCreation({
     getItemType,
     onCreateFolder: handleCreateFolder,
     onAddToFolder: handleAddToFolder,
   });
 
+  // Save when order changes from reordering
+  function handleMainOrderChange(newOrder: string[]) {
+    saveOrder(newOrder, folders);
+  }
+
+  // Combined drag move handler
+  function handleDragMove(info: DragMoveInfo) {
+    handleFolderDragMove(info);
+  }
+
+  // Combined drag end handler
+  function handleDragEnd(info: DragEndInfo, reorder: () => void) {
+    handleFolderDragEnd(info, reorder);
+  }
+
+  // Main drag grid hook
+  const dragGrid = useDragGrid({
+    initialOrder: null,
+    onOrderChange: handleMainOrderChange,
+    onDragMove: handleDragMove,
+    onDragEnd: handleDragEnd,
+  });
+
   // Initialize order once apps/folders load
-  if (order === null && (apps.length > 0 || physicalFolders.length > 0)) {
+  if (dragGrid.order === null && (apps.length > 0 || physicalFolders.length > 0)) {
     // Check if we have saved folders or need to convert physical folders
     const savedFolders = orderConfig?.folders ?? [];
     const effectiveFolders = savedFolders.length > 0
@@ -169,19 +177,24 @@ export function useGrid() {
       // Use saved order, filter out removed items, append new items
       const validSavedOrder = orderConfig.main.filter((id) => allIds.has(id));
       const newItems = [...allIds].filter((id) => !orderConfig.main.includes(id));
-      setOrder([...validSavedOrder, ...newItems]);
+      dragGrid.setOrder([...validSavedOrder, ...newItems]);
     } else {
       // First launch - use default order
-      setOrder([
+      dragGrid.setOrder([
         ...apps.map((app) => app.path),
         ...effectiveFolders.map((f) => f.id),
       ]);
     }
   }
 
-  const activeItem = activeId ? items.find((i) => i.data.id === activeId) ?? null : null;
+  // Build items from current order
+  const items = buildItems(dragGrid.order);
 
-  // Get IDs for SortableContext
+  const activeItem = dragGrid.activeId
+    ? items.find((i) => i.data.id === dragGrid.activeId) ?? null
+    : null;
+
+  // Get IDs for rendering
   const itemIds = items.map((item) => item.data.id);
 
   function handleOpenFolder(folder: GridFolder) {
@@ -194,8 +207,8 @@ export function useGrid() {
       f.id === folderId ? { ...f, appPaths: newOrder } : f
     );
     setFolders(updatedFolders);
-    if (order) {
-      saveOrder(order, updatedFolders);
+    if (dragGrid.order) {
+      saveOrder(dragGrid.order, updatedFolders);
     }
   }
 
@@ -209,7 +222,7 @@ export function useGrid() {
       f.id === folderId ? { ...f, name: newName } : f
     );
 
-    // Update local state (setFolders, not renameFolderLocal which maps over empty localFolders)
+    // Update local state
     setFolders(updatedFolders);
 
     // Update openFolder if it's the one being renamed
@@ -218,19 +231,9 @@ export function useGrid() {
     }
 
     // Persist the change
-    if (order) {
-      saveOrder(order, updatedFolders);
+    if (dragGrid.order) {
+      saveOrder(dragGrid.order, updatedFolders);
     }
-  }
-
-  // Combined drag end handler
-  function onDragEnd(event: Parameters<typeof handleDragEnd>[0]) {
-    resetDelayState();
-    handleFolderDragEnd(event, () => {
-      handleDragEnd(event);
-    });
-    // Always reset drag state (in case folder handlers consumed the drop without calling defaultHandler)
-    resetDrag();
   }
 
   // Get saved order for open folder
@@ -247,13 +250,11 @@ export function useGrid() {
     activeItem,
     openFolder,
 
-    // DnD
-    sensors,
-    delayedStrategy,
+    // DnD - new system
+    containerRef: dragGrid.containerRef,
+    isDragging: dragGrid.isDragging,
+    activeId: dragGrid.activeId,
     dropTarget,
-    handleDragStart,
-    handleDragOver,
-    onDragEnd,
 
     // Folder handlers
     handleOpenFolder,

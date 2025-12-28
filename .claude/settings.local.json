@@ -10,7 +10,9 @@
       "Skill(tailwind)",
       "Skill(tailwind:*)",
       "Skill(react)",
-      "Skill(react:*)"
+      "Skill(react:*)",
+      "Skill(rust)",
+      "Skill(rust:*)"
     ]
   }
 }

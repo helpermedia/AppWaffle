@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { DndContext, DragOverlay, closestCenter } from "@dnd-kit/core";
-import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
 import { AppItem, type GridItem } from "@/components/items/AppItem";
-import { AppItemOverlay } from "@/components/items/AppItemOverlay";
-import { useSortableGrid } from "@/hooks/useSortableGrid";
+import { useDragGrid } from "@/hooks/useDragGrid";
 import { type GridFolder } from "@/components/items/FolderItem";
 import { cn } from "@/utils/cn";
 
@@ -25,8 +22,12 @@ export function FolderModal({
   // Use saved order if available, otherwise use folder.apps order
   const defaultOrder = folder.apps.map((app) => app.path);
   const initialOrder = savedOrder && savedOrder.length > 0 ? savedOrder : defaultOrder;
-  const { order, activeId, sensors, handleDragStart, handleDragEnd } =
-    useSortableGrid({ initialOrder, onOrderChange });
+
+  const { containerRef, order, isDragging, activeId } = useDragGrid({
+    initialOrder,
+    onOrderChange,
+  });
+
   const [isClosing, setIsClosing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(folder.name);
@@ -85,7 +86,6 @@ export function FolderModal({
     .filter((item): item is GridItem => item !== null);
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
-  const itemIds = items.map((item) => item.id);
 
   // Close on Escape (only when not editing)
   useEffect(() => {
@@ -100,80 +100,73 @@ export function FolderModal({
   }, [isEditing]);
 
   const handleBackdropClick = (e: React.MouseEvent) => {
+    // Don't close if we're clicking inside the folder content or during drag
+    if (isDragging) return;
     if (e.target === e.currentTarget) {
       handleClose();
     }
   };
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
+    <div
+      className={cn(
+        "h-full flex flex-col items-center justify-center",
+        isClosing ? "animate-fade-out" : "animate-fade-in"
+      )}
+      onClick={handleBackdropClick}
     >
-      <div
-        className={cn(
-          "h-full flex flex-col items-center justify-center",
-          isClosing ? "animate-fade-out" : "animate-fade-in"
-        )}
-        onClick={handleBackdropClick}
-      >
-        {isEditing ? (
-          <input
-            ref={(node) => {
-              if (node && !didFocusRef.current) {
-                didFocusRef.current = true;
-                node.focus();
-                node.select();
-              }
-            }}
-            type="text"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onBlur={handleSaveEdit}
-            onKeyDown={handleInputKeyDown}
-            className={cn(
-              "bg-transparent text-white text-xl font-medium text-center mb-4 drop-shadow-md",
-              "border-none outline-none w-64",
-              "border-b-2 border-white/50 focus:border-white",
-              isClosing ? "animate-scale-out" : "animate-scale-in"
-            )}
-          />
-        ) : (
-          <h2
-            onClick={handleStartEdit}
-            className={cn(
-              "text-white text-xl font-medium text-center mb-4 drop-shadow-md cursor-text",
-              isClosing ? "animate-scale-out" : "animate-scale-in"
-            )}
-          >
-            {folder.name}
-          </h2>
-        )}
-        <div
+      {isEditing ? (
+        <input
+          ref={(node) => {
+            if (node && !didFocusRef.current) {
+              didFocusRef.current = true;
+              node.focus();
+              node.select();
+            }
+          }}
+          type="text"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={handleSaveEdit}
+          onKeyDown={handleInputKeyDown}
           className={cn(
-            "bg-white/15 backdrop-blur-xl rounded-3xl pt-8 pb-4 w-full max-w-7xl max-h-[60vh] overflow-y-auto",
+            "bg-transparent text-white text-xl font-medium text-center mb-4 drop-shadow-md",
+            "border-none outline-none w-64",
+            "border-b-2 border-white/50 focus:border-white",
+            isClosing ? "animate-scale-out" : "animate-scale-in"
+          )}
+        />
+      ) : (
+        <h2
+          onClick={handleStartEdit}
+          className={cn(
+            "text-white text-xl font-medium text-center mb-4 drop-shadow-md cursor-text",
             isClosing ? "animate-scale-out" : "animate-scale-in"
           )}
         >
-          <SortableContext items={itemIds} strategy={rectSortingStrategy}>
-            <div className="grid grid-cols-7 gap-4 place-items-center">
-              {items.map((item) => (
-                <AppItem
-                  key={item.id}
-                  item={item}
-                  isDragActive={activeItem !== null}
-                />
-              ))}
-            </div>
-          </SortableContext>
+          {folder.name}
+        </h2>
+      )}
+      <div
+        className={cn(
+          "bg-white/15 backdrop-blur-xl rounded-3xl pt-8 pb-4 w-full max-w-7xl max-h-[60vh] overflow-y-auto",
+          isClosing ? "animate-scale-out" : "animate-scale-in"
+        )}
+      >
+        <div
+          ref={containerRef}
+          className="grid grid-cols-7 gap-4 place-items-center"
+        >
+          {items.map((item) => (
+            <AppItem
+              key={item.id}
+              item={item}
+              isDragActive={activeItem !== null}
+              isDragging={activeId === item.id}
+            />
+          ))}
         </div>
       </div>
-
-      <DragOverlay>
-        {activeItem && <AppItemOverlay item={activeItem} />}
-      </DragOverlay>
-    </DndContext>
+    </div>
   );
 }

@@ -1,25 +1,18 @@
 import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { DndContext, DragOverlay, rectIntersection } from "@dnd-kit/core";
-import { SortableContext } from "@dnd-kit/sortable";
 import { useGrid } from "@/hooks/useGrid";
 import { AppItem } from "@/components/items/AppItem";
-import { AppItemOverlay } from "@/components/items/AppItemOverlay";
-import { FolderItem, FolderItemOverlay } from "@/components/items/FolderItem";
+import { FolderItem } from "@/components/items/FolderItem";
 import { FolderModal } from "@/components/FolderModal";
 
 export function AppWaffle() {
   const {
     items,
-    itemIds,
     activeItem,
     openFolder,
-    sensors,
-    delayedStrategy,
+    containerRef,
+    activeId,
     dropTarget,
-    handleDragStart,
-    handleDragOver,
-    onDragEnd,
     handleOpenFolder,
     handleCloseFolder,
     handleRenameFolder,
@@ -59,17 +52,18 @@ export function AppWaffle() {
   }, [openFolder]);
 
   // Close on click outside (empty space)
-  function handleBackgroundClick(e: React.MouseEvent) {
-    // Don't close if folder is open, dragging, or clicking on an item
-    if (openFolder || activeItem) return;
-    const target = e.target as HTMLElement;
-    if (!target.closest("[data-grid-item]")) {
-      invoke("quit_app");
-    }
-  }
+  // TODO: Re-enable after fixing drag issue
+  // function handleBackgroundClick(e: React.MouseEvent) {
+  //   // Don't close if folder is open, dragging, or clicking on an item
+  //   if (openFolder || isDragging) return;
+  //   const target = e.target as HTMLElement;
+  //   if (!target.closest("[data-grid-item]")) {
+  //     invoke("quit_app");
+  //   }
+  // }
 
   return (
-    <div ref={scrollRef} className="w-full h-full p-20 overflow-auto" onClick={handleBackgroundClick}>
+    <div ref={scrollRef} className="w-full h-full p-20 overflow-auto">
       {openFolder && (
         <FolderModal
           folder={openFolder}
@@ -81,48 +75,38 @@ export function AppWaffle() {
       )}
 
       <div className={openFolder ? "hidden" : undefined}>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={rectIntersection}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={onDragEnd}
+        <div
+          ref={containerRef}
+          className="grid grid-cols-7 gap-4 place-items-center max-w-7xl mx-auto"
         >
-          <SortableContext items={itemIds} strategy={delayedStrategy}>
-            <div className="grid grid-cols-7 gap-4 place-items-center max-w-7xl mx-auto">
-              {items.map((item) => {
-                const isDropTarget = dropTarget?.id === item.data.id;
-                const dropAction = isDropTarget ? dropTarget.action : undefined;
+          {items.map((item) => {
+            const isDropTarget = dropTarget?.id === item.data.id;
+            const dropAction = isDropTarget ? dropTarget.action : undefined;
 
-                if (item.type === "app") {
-                  return (
-                    <AppItem
-                      key={item.data.id}
-                      item={item.data}
-                      isDragActive={activeItem !== null}
-                      dropAction={dropAction}
-                    />
-                  );
-                } else {
-                  return (
-                    <FolderItem
-                      key={item.data.id}
-                      item={item.data}
-                      isDragActive={activeItem !== null}
-                      dropAction={dropAction}
-                      onOpen={onOpenFolder}
-                    />
-                  );
-                }
-              })}
-            </div>
-          </SortableContext>
-
-          <DragOverlay>
-            {activeItem?.type === "app" && <AppItemOverlay item={activeItem.data} />}
-            {activeItem?.type === "folder" && <FolderItemOverlay item={activeItem.data} />}
-          </DragOverlay>
-        </DndContext>
+            if (item.type === "app") {
+              return (
+                <AppItem
+                  key={item.data.id}
+                  item={item.data}
+                  isDragActive={activeItem !== null}
+                  isDragging={activeId === item.data.id}
+                  dropAction={dropAction}
+                />
+              );
+            } else {
+              return (
+                <FolderItem
+                  key={item.data.id}
+                  item={item.data}
+                  isDragActive={activeItem !== null}
+                  isDragging={activeId === item.data.id}
+                  dropAction={dropAction}
+                  onOpen={onOpenFolder}
+                />
+              );
+            }
+          })}
+        </div>
       </div>
     </div>
   );

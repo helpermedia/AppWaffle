@@ -1,5 +1,3 @@
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/utils/cn";
 import { Container } from "@/components/ui/Container";
 import { Icon } from "@/components/ui/Icon";
@@ -13,41 +11,29 @@ export type GridItem = AppInfo & { id: string };
 export function AppItem({
   item,
   isDragActive,
+  isDragging,
   dropAction,
 }: {
   item: GridItem;
   isDragActive: boolean;
+  isDragging: boolean;
   dropAction?: DropAction;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({
-      id: item.id,
-      transition: {
-        duration: 200,
-        easing: "ease",
-      },
-    });
-
-  // Don't apply transform when this item is the folder creation target
-  // This keeps the icon in place while the ring is showing
-  const style = {
-    transform: dropAction === "create-folder" ? undefined : CSS.Transform.toString(transform),
-    transition,
-  };
-
   return (
     <Container
-      ref={setNodeRef}
-      style={style}
+      data-draggable
+      data-id={item.id}
       className={cn(
         "relative",
-        isDragging && "opacity-0",
-        !isDragging && isDragActive && "transition-transform duration-200"
+        // Transition for smooth shifting during drag
+        isDragActive && "transition-transform duration-200",
+        // Hide original when being dragged (ghost is visible instead)
+        isDragging && "is-dragging"
       )}
     >
-      <div className="relative">
+      <div className="relative" data-drag-handle>
         <DropTarget action={dropAction ?? null} />
-        <Icon icon={item.icon} alt={item.name} {...attributes} {...listeners} />
+        <Icon icon={item.icon} alt={item.name} />
       </div>
       <Label>{item.name}</Label>
     </Container>

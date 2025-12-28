@@ -6,14 +6,25 @@ interface ContainerProps {
   className?: string;
   style?: CSSProperties;
   ref?: Ref<HTMLDivElement>;
+  "data-draggable"?: boolean;
+  "data-id"?: string;
 }
 
-export function Container({ children, className, style, ref }: ContainerProps) {
+export function Container({
+  children,
+  className,
+  style,
+  ref,
+  "data-draggable": dataDraggable,
+  "data-id": dataId,
+}: ContainerProps) {
   return (
     <div
       ref={ref}
       style={style}
       data-grid-item
+      data-draggable={dataDraggable}
+      data-id={dataId}
       className={cn(
         "w-32 h-40 p-2 rounded-xl flex flex-col items-center",
         className

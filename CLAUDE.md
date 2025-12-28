@@ -21,7 +21,7 @@ AppWaffle is a macOS Launchpad alternative built with Tauri, React 19 and TypeSc
 ## Tech Stack
 
 - **Frontend**: React 19, TypeScript, Tailwind CSS v4, Vite 8
-- **Drag & Drop**: @dnd-kit (core, sortable, utilities)
+- **Drag & Drop**: Custom implementation (src/lib/dnd) - center-crossing detection, direct DOM manipulation
 - **Backend**: Rust, Tauri v2
 - **Package Manager**: Bun
 - **Icons**: NSWorkspace API (via Tauri)
@@ -31,7 +31,8 @@ AppWaffle is a macOS Launchpad alternative built with Tauri, React 19 and TypeSc
 ```
 src/
 ├── components/     # React components
-├── hooks/          # Custom React hooks (useApps, etc.)
+├── hooks/          # Custom React hooks (useApps, useDragGrid, etc.)
+├── lib/dnd/        # Custom drag-and-drop engine
 ├── types/          # TypeScript type definitions
 ├── utils/          # Utility functions
 ├── main.tsx        # App entry point

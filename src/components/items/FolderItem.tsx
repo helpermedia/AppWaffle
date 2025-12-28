@@ -1,5 +1,3 @@
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { getIconSrc } from "@/utils/iconUtils";
 import { cn } from "@/utils/cn";
 import { Container } from "@/components/ui/Container";
@@ -35,29 +33,18 @@ export function FolderPreview({ apps }: { apps: AppInfo[] }) {
 export function FolderItem({
   item,
   isDragActive,
+  isDragging,
   dropAction,
   onOpen,
 }: {
   item: GridFolder;
   isDragActive: boolean;
+  isDragging: boolean;
   dropAction?: DropAction;
   onOpen: (folder: GridFolder) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({
-      id: item.id,
-      transition: {
-        duration: 200,
-        easing: "ease",
-      },
-    });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
   const handleClick = () => {
+    // Only open if not being dragged
     if (!isDragging) {
       onOpen(item);
     }
@@ -65,15 +52,17 @@ export function FolderItem({
 
   return (
     <Container
-      ref={setNodeRef}
-      style={style}
+      data-draggable
+      data-id={item.id}
       className={cn(
         "relative",
-        isDragging && "opacity-0",
-        !isDragging && isDragActive && "transition-transform duration-200"
+        // Transition for smooth shifting during drag
+        isDragActive && "transition-transform duration-200",
+        // Hide original when being dragged (ghost is visible instead)
+        isDragging && "is-dragging"
       )}
     >
-      <div className="relative" onClick={handleClick} {...attributes} {...listeners}>
+      <div className="relative" data-drag-handle onClick={handleClick}>
         <DropTarget action={dropAction ?? null} />
         <FolderPreview apps={item.apps} />
       </div>
