@@ -2,16 +2,17 @@
 
 Apple removed Launchpad in macOS 26 Tahoe. Time for a tastier way to launch your apps — served fresh in a crispy grid.
 
-AppWaffle is a modern, customizable app launcher built with Tauri, React and TypeScript. It saves your layout and works across platforms.
+AppWaffle is a modern, customizable app launcher built with Tauri, React and TypeScript. It saves your layout and remembers your preferences.
 
 ## Features
 
 - Full-screen app launcher with vibrancy blur effect
-- Drag-and-drop reordering of apps and folders
-- Folder support with expandable nested app organization
+- Drag-and-drop reordering with macOS Launchpad-style behavior
+- Folder support: drag apps together to create, drag out to remove
+- Seamless drag handoff from folder modal to main grid
 - Progressive icon loading with disk caching
 - Keyboard navigation (Arrow keys, Enter to launch, Escape to close)
-- Click outside to dismiss
+- Click outside or press Escape to dismiss
 
 ## Requirements
 
@@ -35,7 +36,7 @@ bun tauri build
 ## Tech Stack
 
 - **Frontend**: React, TypeScript, Tailwind CSS, Vite
-- **Drag & Drop**: @dnd-kit
+- **Drag & Drop**: Custom implementation with center-crossing detection
 - **Backend**: Rust, Tauri
 - **Icons**: NSWorkspace API
 
