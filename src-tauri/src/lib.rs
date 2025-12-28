@@ -392,6 +392,9 @@ async fn show_window(window: tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+/// Flag to prevent focus-loss close during app launch animation
+static IS_LAUNCHING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Quit the app, saving order state first
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
@@ -399,6 +402,21 @@ fn quit_app(app: tauri::AppHandle) {
         eprintln!("Failed to save order on quit: {}", e);
     }
     app.exit(0);
+}
+
+/// Quit the app after a delay (used for launch animation)
+/// During the delay, focus-loss closing is disabled
+#[tauri::command]
+fn quit_after_delay(app: tauri::AppHandle, delay_ms: u64) {
+    IS_LAUNCHING.store(true, std::sync::atomic::Ordering::SeqCst);
+
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+        if let Err(e) = save_order_to_disk() {
+            eprintln!("Failed to save order on delayed quit: {}", e);
+        }
+        app.exit(0);
+    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -448,7 +466,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_apps, get_app_icon, launch_app, show_window, load_config, update_order, quit_app])
+        .invoke_handler(tauri::generate_handler![get_apps, get_app_icon, launch_app, show_window, load_config, update_order, quit_app, quit_after_delay])
         .on_menu_event(|app, event| {
             if event.id() == "quit" {
                 // Save order state before quitting
@@ -461,11 +479,21 @@ pub fn run() {
         .on_window_event(|window, event| {
             match event {
                 WindowEvent::Focused(false) => {
-                    // Close when losing focus (like real Launchpad)
-                    if let Err(e) = save_order_to_disk() {
-                        eprintln!("Failed to save order on focus loss: {}", e);
+                    // Skip focus-loss close during app launch/close animation
+                    if IS_LAUNCHING.load(std::sync::atomic::Ordering::SeqCst) {
+                        return;
                     }
-                    window.app_handle().exit(0);
+                    // Close when losing focus (like real Launchpad)
+                    // Use same delay as other close actions for consistent feel
+                    IS_LAUNCHING.store(true, std::sync::atomic::Ordering::SeqCst);
+                    let app = window.app_handle().clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                        if let Err(e) = save_order_to_disk() {
+                            eprintln!("Failed to save order on focus loss: {}", e);
+                        }
+                        app.exit(0);
+                    });
                 }
                 WindowEvent::CloseRequested { .. } => {
                     // Save order state before window closes

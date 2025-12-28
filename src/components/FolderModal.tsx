@@ -11,6 +11,8 @@ interface FolderModalProps {
   onOrderChange?: (newOrder: string[]) => void;
   onRename?: (newName: string) => void;
   onClose: () => void;
+  onLaunch?: (path: string) => void;
+  launchingPath?: string | null;
   /** Coordinator for seamless drag handoff to main grid */
   coordinator?: DragCoordinator | null;
 }
@@ -21,6 +23,8 @@ export function FolderModal({
   onOrderChange,
   onRename,
   onClose,
+  onLaunch,
+  launchingPath,
   coordinator,
 }: FolderModalProps) {
   // Use saved order if available, otherwise use folder.apps order
@@ -215,6 +219,8 @@ export function FolderModal({
               item={item}
               isDragActive={activeItem !== null}
               isDragging={activeId === item.id}
+              onLaunch={onLaunch}
+              isLaunching={launchingPath === item.path}
             />
           ))}
         </div>

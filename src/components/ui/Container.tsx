@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode, Ref } from "react";
+import type { CSSProperties, ReactNode, Ref, MouseEventHandler } from "react";
 import { cn } from "@/utils/cn";
 
 interface ContainerProps {
@@ -6,6 +6,7 @@ interface ContainerProps {
   className?: string;
   style?: CSSProperties;
   ref?: Ref<HTMLDivElement>;
+  onClick?: MouseEventHandler<HTMLDivElement>;
   "data-draggable"?: boolean;
   "data-id"?: string;
 }
@@ -15,6 +16,7 @@ export function Container({
   className,
   style,
   ref,
+  onClick,
   "data-draggable": dataDraggable,
   "data-id": dataId,
 }: ContainerProps) {
@@ -22,6 +24,7 @@ export function Container({
     <div
       ref={ref}
       style={style}
+      onClick={onClick}
       data-grid-item
       data-draggable={dataDraggable}
       data-id={dataId}

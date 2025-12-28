@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useGrid } from "@/hooks/useGrid";
 import { AppItem } from "@/components/items/AppItem";
@@ -11,6 +11,7 @@ export function AppWaffle() {
     activeItem,
     openFolder,
     containerRef,
+    isDragging,
     activeId,
     dropTarget,
     coordinator,
@@ -23,6 +24,9 @@ export function AppWaffle() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const savedScrollTop = useRef(0);
+  const [launchingPath, setLaunchingPath] = useState<string | null>(null);
+  const [isClosing, setIsClosing] = useState(false);
+  const isClosingRef = useRef(false);
 
   // Save scroll position when opening folder
   function onOpenFolder(folder: Parameters<typeof handleOpenFolder>[0]) {
@@ -42,10 +46,35 @@ export function AppWaffle() {
     });
   }
 
+  // Unified close with fade-out animation
+  const CLOSE_ANIMATION_MS = 300;
+
+  function closeApp() {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+    setIsClosing(true);
+    invoke("quit_after_delay", { delayMs: CLOSE_ANIMATION_MS });
+  }
+
+  function handleLaunch(path: string) {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+
+    // Launch app immediately
+    invoke("launch_app", { path });
+    setLaunchingPath(path);
+
+    // Show pulse effect first, then fade out
+    setTimeout(() => setIsClosing(true), 600);
+
+    // Close after pulse + fade-out
+    invoke("quit_after_delay", { delayMs: 900 });
+  }
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape" && !openFolder) {
-        invoke("quit_app");
+        closeApp();
       }
     }
     document.addEventListener("keydown", handleKeyDown);
@@ -53,18 +82,23 @@ export function AppWaffle() {
   }, [openFolder]);
 
   // Close on click outside (empty space)
-  // TODO: Re-enable after fixing drag issue
-  // function handleBackgroundClick(e: React.MouseEvent) {
-  //   // Don't close if folder is open, dragging, or clicking on an item
-  //   if (openFolder || isDragging) return;
-  //   const target = e.target as HTMLElement;
-  //   if (!target.closest("[data-grid-item]")) {
-  //     invoke("quit_app");
-  //   }
-  // }
+  function handleBackgroundClick(e: React.MouseEvent) {
+    // Don't close if folder is open, dragging, or clicking on an item
+    if (openFolder || isDragging) return;
+    const target = e.target as HTMLElement;
+    if (!target.closest("[data-draggable]")) {
+      closeApp();
+    }
+  }
 
   return (
-    <div ref={scrollRef} className="w-full h-full p-20 overflow-auto">
+    <div
+      ref={scrollRef}
+      className={`w-full h-full p-20 overflow-auto transition-opacity duration-300 ${
+        isClosing ? "opacity-0" : "opacity-100"
+      }`}
+      onClick={handleBackgroundClick}
+    >
       {openFolder && (
         <FolderModal
           folder={openFolder}
@@ -72,6 +106,8 @@ export function AppWaffle() {
           onOrderChange={(newOrder) => handleFolderOrderChange(openFolder.id, newOrder)}
           onRename={(newName) => handleRenameFolder(openFolder.id, newName)}
           onClose={onCloseFolder}
+          onLaunch={handleLaunch}
+          launchingPath={launchingPath}
           coordinator={coordinator}
         />
       )}
@@ -93,6 +129,8 @@ export function AppWaffle() {
                   isDragActive={activeItem !== null}
                   isDragging={activeId === item.data.id}
                   dropAction={dropAction}
+                  onLaunch={handleLaunch}
+                  isLaunching={launchingPath === item.data.path}
                 />
               );
             } else {

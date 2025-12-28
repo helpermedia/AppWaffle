@@ -8,6 +8,7 @@
   --animate-scale-in: scale-in 0.2s ease-out;
   --animate-scale-out: scale-out 0.2s ease-out forwards;
   --animate-pulse-glow: pulse-glow 1.2s ease-in-out infinite;
+  --animate-launch-grow: launch-grow 0.4s ease-out forwards;
 }
 
 @keyframes fade-in {
@@ -36,6 +37,15 @@
   }
   50% {
     box-shadow: 0 0 8px 5px rgba(255, 255, 255, 0.8);
+  }
+}
+
+@keyframes launch-grow {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.25);
   }
 }
 
