@@ -98,10 +98,17 @@ export function useGrid() {
     // Open modal first
     setOpenFolder({ id: newFolder.id, name: newFolder.name, apps: resolvedApps });
 
-    // Update order
+    // Update order - folder goes where target was
+    const sourceIndex = currentOrder.indexOf(sourceAppId);
     const targetIndex = currentOrder.indexOf(targetAppId);
     const newOrder = currentOrder.filter((id) => id !== sourceAppId && id !== targetAppId);
-    const insertIndex = Math.min(targetIndex, newOrder.length);
+
+    // Adjust insert index: if source was before target, target's position shifts down by 1
+    let insertIndex = targetIndex;
+    if (sourceIndex < targetIndex) {
+      insertIndex--;
+    }
+    insertIndex = Math.min(insertIndex, newOrder.length);
     newOrder.splice(insertIndex, 0, newFolder.id);
 
     const updatedFolders = [...folders, newFolder];
