@@ -28,7 +28,7 @@ export function AppItem({
         // Transition for smooth shifting during drag
         isDragActive && "transition-transform duration-200",
         // Hide original when being dragged (ghost is visible instead)
-        isDragging && "is-dragging"
+        isDragging && "opacity-0 pointer-events-none"
       )}
     >
       <div className="relative" data-drag-handle>
