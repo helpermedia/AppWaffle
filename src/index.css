@@ -4,6 +4,7 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
     Roboto, Helvetica, Arial, sans-serif;
   --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-fade-in-delayed: fade-in 0.2s ease-out 50ms forwards;
   --animate-fade-out: fade-out 0.2s ease-out forwards;
   --animate-scale-in: scale-in 0.2s ease-out;
   --animate-scale-out: scale-out 0.2s ease-out forwards;
@@ -52,12 +53,11 @@
 @layer base {
   html,
   body {
-    @apply m-0 p-0 overflow-hidden;
-    background: transparent !important;
+    @apply m-0 p-0 overflow-hidden bg-transparent!;
   }
 
   #root {
-    @apply w-screen h-screen bg-transparent;
+    @apply w-screen h-screen bg-transparent opacity-0 animate-fade-in-delayed;
   }
 
   * {

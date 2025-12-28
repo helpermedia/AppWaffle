@@ -6,7 +6,11 @@ let appsPromise: Promise<AppsResponse> | null = null;
 
 export function getAppsPromise(): Promise<AppsResponse> {
   if (!appsPromise) {
-    appsPromise = invoke<AppsResponse>("get_apps");
+    appsPromise = invoke<AppsResponse>("get_apps").then(async (response) => {
+      // Show window after data is ready
+      await invoke("show_window");
+      return response;
+    });
   }
   return appsPromise;
 }

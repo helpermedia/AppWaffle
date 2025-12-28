@@ -1,4 +1,5 @@
 use base64::Engine;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -163,7 +164,7 @@ fn discover_apps_and_folders() -> (Vec<PathBuf>, Vec<(PathBuf, Vec<PathBuf>)>) {
 
 /// Get icons cache directory
 fn get_icons_cache_dir() -> Option<PathBuf> {
-    dirs::cache_dir().map(|p| p.join("com.appwaffle").join("icons"))
+    dirs::cache_dir().map(|p| p.join("com.helpermedia.appwaffle").join("icons"))
 }
 
 /// Get a stable hash for an app path to use as icon filename
@@ -244,12 +245,12 @@ fn generate_and_cache_icon(app_path: &str) -> Option<String> {
     Some(format!("file://{}", saved_path.display()))
 }
 
-/// Get config directory: ~/Library/Application Support/com.appwaffle/
+/// Get config directory: ~/Library/Application Support/com.helpermedia.appwaffle/
 fn get_config_dir() -> Option<PathBuf> {
-    dirs::config_dir().map(|p| p.join("com.appwaffle"))
+    dirs::config_dir().map(|p| p.join("com.helpermedia.appwaffle"))
 }
 
-/// Get config file path: ~/Library/Application Support/com.appwaffle/config.json
+/// Get config file path: ~/Library/Application Support/com.helpermedia.appwaffle/config.json
 fn get_config_path() -> Option<PathBuf> {
     get_config_dir().map(|p| p.join("config.json"))
 }
@@ -321,13 +322,14 @@ async fn get_app_icon(path: String) -> Option<String> {
     None
 }
 
-/// Get all apps and folders - returns instantly with cached icons (null for uncached)
+/// Get all apps and folders - loads icons in parallel for speed
 #[tauri::command]
 async fn get_apps() -> Result<AppsResponse, String> {
     let (app_paths, folder_data) = discover_apps_and_folders();
 
+    // Load app icons in parallel
     let mut apps: Vec<AppInfo> = app_paths
-        .into_iter()
+        .into_par_iter()
         .filter_map(|path| {
             let name = path.file_stem()?.to_string_lossy().to_string();
             let path_str = path.to_string_lossy().to_string();
@@ -343,14 +345,15 @@ async fn get_apps() -> Result<AppsResponse, String> {
 
     apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
+    // Load folder icons in parallel
     let folders: Vec<FolderInfo> = folder_data
-        .into_iter()
+        .into_par_iter()
         .filter_map(|(folder_path, sub_app_paths)| {
             let name = folder_path.file_name()?.to_string_lossy().to_string();
             let path_str = folder_path.to_string_lossy().to_string();
 
             let folder_apps: Vec<AppInfo> = sub_app_paths
-                .into_iter()
+                .into_par_iter()
                 .filter_map(|app_path| {
                     let app_name = app_path.file_stem()?.to_string_lossy().to_string();
                     let app_path_str = app_path.to_string_lossy().to_string();
@@ -460,8 +463,7 @@ pub fn run() {
                     }
                 }
 
-                window.show().ok();
-                window.set_focus().ok();
+                // Window starts hidden - frontend calls show_window after content is ready
             }
 
             Ok(())
