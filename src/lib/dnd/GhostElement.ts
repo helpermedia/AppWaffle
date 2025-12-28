@@ -91,6 +91,35 @@ export class GhostElement {
   }
 
   /**
+   * Adopt an existing ghost element from another engine.
+   * Used during drag handoff to maintain visual continuity.
+   *
+   * @param existingElement - The ghost element to adopt
+   * @param currentPointer - Current pointer position for offset calculation
+   */
+  adopt(existingElement: HTMLElement, currentPointer: Point): void {
+    // Clean up any existing ghost first (but don't destroy the one we're adopting)
+    if (this.element && this.element !== existingElement) {
+      this.element.remove();
+    }
+
+    // Adopt the existing element
+    this.element = existingElement;
+
+    // Recalculate offset based on current position and pointer
+    // The ghost uses transform for positioning, so we need to parse it
+    const rect = existingElement.getBoundingClientRect();
+    this.offset = {
+      x: rect.left - currentPointer.x,
+      y: rect.top - currentPointer.y,
+    };
+
+    // Update styling to match this engine's options
+    this.element.style.opacity = String(this.options.opacity);
+    this.element.classList.add(this.options.className);
+  }
+
+  /**
    * Animate ghost to target center position, then destroy.
    * Returns a Promise that resolves when animation completes.
    * Used for smooth drop animation.
@@ -125,6 +154,18 @@ export class GhostElement {
   /** Get the current ghost element (for external access if needed) */
   getElement(): HTMLElement | null {
     return this.element;
+  }
+
+  /**
+   * Detach and return the ghost element, transferring ownership to caller.
+   * After calling this, the GhostElement instance no longer manages the element,
+   * so destroy() will not remove it from the DOM.
+   * Used during drag handoff to preserve the ghost across engine switches.
+   */
+  detach(): HTMLElement | null {
+    const element = this.element;
+    this.element = null;
+    return element;
   }
 
   private getTransform(pointer: Point): string {

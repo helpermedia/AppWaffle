@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useApps } from "@/hooks/useApps";
 import { useDragGrid } from "@/hooks/useDragGrid";
 import { useFolders } from "@/hooks/useFolders";
 import { useFolderCreation } from "@/hooks/useFolderCreation";
 import { useConfig, useDndSettings } from "@/hooks/useConfig";
 import { isFolderId, resolveFolderApps, convertPhysicalFolders } from "@/utils/folderUtils";
+import { DragCoordinator } from "@/lib/dnd";
+import type { HandoffRequest } from "@/lib/dnd";
 import type { GridItem } from "@/components/items/AppItem";
 import type { GridFolder } from "@/components/items/FolderItem";
 import type { DragMoveInfo, DragEndInfo, DropAnimationInfo } from "@/hooks/useDragGrid";
@@ -30,6 +32,18 @@ export function useGrid() {
     : (orderConfig?.folders ?? []);
 
   const [openFolder, setOpenFolder] = useState<GridFolder | null>(null);
+
+  // Coordinator for drag handoff between folder and main grid
+  const [coordinator] = useState(() => new DragCoordinator({}));
+
+  // Ref to hold the current handoff handler (set in effect to avoid render-time ref access)
+  const handoffHandlerRef = useRef<((request: HandoffRequest) => Promise<void> | void) | null>(null);
+
+  // Wire up the coordinator's onHandoff to call through the ref (once on mount)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- Coordinator is mutable by design
+    coordinator.onHandoff = (request) => handoffHandlerRef.current?.(request);
+  }, [coordinator]);
 
   // Create apps map for resolving folder apps
   // Include both top-level apps AND apps from physical folders (for initial conversion)
@@ -180,6 +194,83 @@ export function useGrid() {
     getDropAnimationTarget: handleGetDropAnimationTarget,
   });
 
+  // Refs for handoff callback to access current state
+  const openFolderRef = useRef(openFolder);
+  const foldersRef = useRef(folders);
+  const dragGridRef = useRef(dragGrid);
+  const saveOrderRef = useRef(saveOrder);
+  const setFoldersRef = useRef(setFolders);
+
+  useEffect(() => {
+    openFolderRef.current = openFolder;
+    foldersRef.current = folders;
+    dragGridRef.current = dragGrid;
+    saveOrderRef.current = saveOrder;
+    setFoldersRef.current = setFolders;
+  });
+
+  // Set up the actual handoff handler in an effect (can't update refs during render)
+  useEffect(() => {
+    handoffHandlerRef.current = async (request: HandoffRequest) => {
+    const currentOpenFolder = openFolderRef.current;
+    const currentDragGrid = dragGridRef.current;
+    const currentFolders = foldersRef.current;
+
+    if (!currentOpenFolder || !currentDragGrid.order) return;
+
+    const folder = currentFolders.find((f) => f.id === currentOpenFolder.id);
+    if (!folder) return;
+
+    // Remove app from folder
+    const updatedAppPaths = folder.appPaths.filter((id) => id !== request.itemId);
+
+    // Calculate insertion index based on pointer position (approximate)
+    // We'll insert at the end for now; the user can drag to final position
+    let newOrder: string[];
+    let updatedFolders: typeof currentFolders;
+
+    if (updatedAppPaths.length <= 1) {
+      // Folder becomes empty or has only 1 app - delete folder
+      newOrder = [...currentDragGrid.order];
+      const folderIndex = newOrder.indexOf(currentOpenFolder.id);
+      newOrder.splice(folderIndex, 1);
+      // Insert remaining apps + dragged app at folder's position
+      newOrder.splice(folderIndex, 0, ...updatedAppPaths, request.itemId);
+      updatedFolders = currentFolders.filter((f) => f.id !== currentOpenFolder.id);
+    } else {
+      // Folder still has apps - add dragged app to end of main grid
+      newOrder = [...currentDragGrid.order, request.itemId];
+      updatedFolders = currentFolders.map((f) =>
+        f.id === currentOpenFolder.id ? { ...f, appPaths: updatedAppPaths } : f
+      );
+    }
+
+    // Update state synchronously
+    setFoldersRef.current(updatedFolders);
+    currentDragGrid.setOrder(newOrder);
+    saveOrderRef.current(newOrder, updatedFolders);
+    setOpenFolder(null);
+    };
+  }); // No deps - uses refs which always have current values
+
+  // Register main grid with coordinator when engine is available
+  useEffect(() => {
+    const engine = dragGrid.getEngine();
+    const container = dragGrid.containerRef.current;
+
+    if (coordinator && engine && container) {
+      coordinator.register({
+        id: "main-grid",
+        engine,
+        container,
+      });
+    }
+
+    return () => {
+      coordinator?.unregister("main-grid");
+    };
+  }, [coordinator, dragGrid]);
+
   // Initialize order once apps/folders load
   if (dragGrid.order === null && (apps.length > 0 || physicalFolders.length > 0)) {
     // Check if we have saved folders or need to convert physical folders
@@ -329,6 +420,9 @@ export function useGrid() {
     isDragging: dragGrid.isDragging,
     activeId: dragGrid.activeId,
     dropTarget,
+
+    // Coordinator for folder handoff
+    coordinator,
 
     // Folder handlers
     handleOpenFolder,

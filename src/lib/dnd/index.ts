@@ -1,6 +1,9 @@
 // Core engine
 export { DragEngine } from "./DragEngine";
 
+// Coordination (for multi-grid handoff)
+export { DragCoordinator } from "./DragCoordinator";
+
 // Sub-modules (for advanced usage)
 export { PointerTracker } from "./PointerTracker";
 export { GhostElement } from "./GhostElement";
@@ -17,3 +20,9 @@ export type {
   DragOptions,
   DropAnimationTarget,
 } from "./types";
+
+export type {
+  GridRegistration,
+  HandoffRequest,
+  DragCoordinatorOptions,
+} from "./DragCoordinator";

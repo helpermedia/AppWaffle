@@ -87,6 +87,8 @@ interface UseDragGridReturn {
   activeId: string | null;
   /** Index of item being dragged */
   activeIndex: number | null;
+  /** Get the underlying DragEngine instance (for coordination) */
+  getEngine: () => DragEngine | null;
 }
 
 /**
@@ -421,5 +423,6 @@ export function useDragGrid({
     isDragging,
     activeId,
     activeIndex,
+    getEngine: () => engineRef.current,
   };
 }

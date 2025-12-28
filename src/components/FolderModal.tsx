@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { AppItem, type GridItem } from "@/components/items/AppItem";
-import { useDragGrid } from "@/hooks/useDragGrid";
+import { useDragGrid, type DragMoveInfo } from "@/hooks/useDragGrid";
 import { type GridFolder } from "@/components/items/FolderItem";
 import { cn } from "@/utils/cn";
+import type { DragCoordinator } from "@/lib/dnd";
 
 interface FolderModalProps {
   folder: GridFolder;
   savedOrder?: string[];
   onOrderChange?: (newOrder: string[]) => void;
   onRename?: (newName: string) => void;
-  onRemoveFromFolder?: (appId: string) => void;
   onClose: () => void;
+  /** Coordinator for seamless drag handoff to main grid */
+  coordinator?: DragCoordinator | null;
 }
 
 export function FolderModal({
@@ -18,8 +20,8 @@ export function FolderModal({
   savedOrder,
   onOrderChange,
   onRename,
-  onRemoveFromFolder,
   onClose,
+  coordinator,
 }: FolderModalProps) {
   // Use saved order if available, otherwise use folder.apps order
   const defaultOrder = folder.apps.map((app) => app.path);
@@ -31,24 +33,63 @@ export function FolderModal({
   const didFocusRef = useRef(false);
   const isClosingRef = useRef(false);
   const onCloseRef = useRef(onClose);
-  const onRemoveRef = useRef(onRemoveFromFolder);
+  const handoffTriggeredRef = useRef(false);
 
   useEffect(() => {
     onCloseRef.current = onClose;
-    onRemoveRef.current = onRemoveFromFolder;
   });
 
-  // Handle drag exit - close folder immediately (no animation) when item is dragged out
-  const handleDragExit = (appId: string) => {
-    onRemoveRef.current?.(appId);
-    onCloseRef.current(); // Close immediately, no animation
+  // Handle drag move - check for handoff to main grid
+  const handleDragMove = (info: DragMoveInfo) => {
+    if (!coordinator || handoffTriggeredRef.current) return;
+
+    // Check if we should hand off to another grid
+    const targetGridId = coordinator.checkBoundaries(info.pointer);
+
+    if (targetGridId) {
+      handoffTriggeredRef.current = true;
+      // Trigger handoff - coordinator will update state and close folder
+      coordinator.handoff(targetGridId, info.activeId, info.pointer);
+    }
   };
 
-  const { containerRef, order, isDragging, activeId } = useDragGrid({
+  const { containerRef, order, isDragging, activeId, getEngine } = useDragGrid({
     initialOrder,
     onOrderChange,
-    onDragExit: handleDragExit,
+    onDragMove: handleDragMove,
   });
+
+  // Reset handoff flag when drag ends
+  useEffect(() => {
+    if (!isDragging) {
+      handoffTriggeredRef.current = false;
+    }
+  }, [isDragging]);
+
+  // Register with coordinator
+  useEffect(() => {
+    if (!coordinator) return;
+
+    const engine = getEngine();
+    const container = containerRef.current;
+
+    if (engine && container) {
+      coordinator.register({
+        id: "folder-modal",
+        engine,
+        container,
+      });
+      coordinator.setActiveGrid("folder-modal");
+    }
+
+    return () => {
+      coordinator.unregister("folder-modal");
+      // If folder was the active grid, clear it
+      if (coordinator.getActiveGrid() === "folder-modal") {
+        coordinator.setActiveGrid(null);
+      }
+    };
+  }, [coordinator, getEngine, containerRef]);
 
   function handleClose() {
     if (isClosingRef.current) return;

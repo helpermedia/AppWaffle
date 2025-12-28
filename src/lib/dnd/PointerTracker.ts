@@ -44,6 +44,19 @@ export class PointerTracker {
     this.cleanup();
   }
 
+  /**
+   * Adopt an in-progress drag from another tracker.
+   * Used for seamless handoff between grids.
+   * This starts listening for pointer events as if a drag was already in progress.
+   */
+  adoptDrag(): void {
+    this.isDragging = true;
+    // Start listening for move/up on document
+    document.addEventListener("pointermove", this.handlePointerMove);
+    document.addEventListener("pointerup", this.handlePointerUp);
+    document.addEventListener("pointercancel", this.handlePointerCancel);
+  }
+
   private handlePointerDown(e: PointerEvent): void {
     // Only handle primary button (left click / touch)
     if (e.button !== 0) return;
@@ -70,31 +83,33 @@ export class PointerTracker {
   }
 
   private handlePointerMove(e: PointerEvent): void {
-    if (!this.startPoint || !this.activeElement) return;
-
     const currentPoint = { x: e.clientX, y: e.clientY };
 
-    if (!this.isDragging) {
-      // Check if we've moved enough to activate drag
-      const distance = Math.hypot(
-        currentPoint.x - this.startPoint.x,
-        currentPoint.y - this.startPoint.y
-      );
-
-      if (distance >= PointerTracker.ACTIVATION_DISTANCE) {
-        this.isDragging = true;
-        // Prevent text selection and capture pointer now that drag has started
-        e.preventDefault();
-        if (this.pointerId !== null) {
-          this.container.setPointerCapture(this.pointerId);
-        }
-        this.onDragStart?.(this.activeElement, this.startPoint);
-      }
-    }
-
+    // For adopted drags, isDragging is true but we don't have startPoint/activeElement
+    // Just forward the pointer events directly
     if (this.isDragging) {
       e.preventDefault();
       this.onDragMove?.(currentPoint);
+      return;
+    }
+
+    // Normal drag initiation - need startPoint and activeElement for activation check
+    if (!this.startPoint || !this.activeElement) return;
+
+    // Check if we've moved enough to activate drag
+    const distance = Math.hypot(
+      currentPoint.x - this.startPoint.x,
+      currentPoint.y - this.startPoint.y
+    );
+
+    if (distance >= PointerTracker.ACTIVATION_DISTANCE) {
+      this.isDragging = true;
+      // Prevent text selection and capture pointer now that drag has started
+      e.preventDefault();
+      if (this.pointerId !== null) {
+        this.container.setPointerCapture(this.pointerId);
+      }
+      this.onDragStart?.(this.activeElement, this.startPoint);
     }
   }
 

@@ -81,14 +81,115 @@ export class DragEngine {
     return this.gridTransforms.getItems();
   }
 
-  /** Cancel the current drag operation (cleanup without committing) */
-  cancel(): void {
+  /** Get the container element */
+  getContainer(): HTMLElement {
+    return this.container;
+  }
+
+  /** Get the ghost element (for handoff to another engine) */
+  getGhostElement(): HTMLElement | null {
+    return this.ghostElement.getElement();
+  }
+
+  /**
+   * Detach and return the ghost element, transferring ownership to caller.
+   * After calling this, the engine no longer manages the ghost,
+   * so destroy() or cancel() won't remove it from the DOM.
+   * Used during drag handoff to preserve the ghost across engine switches.
+   */
+  detachGhost(): HTMLElement | null {
+    return this.ghostElement.detach();
+  }
+
+  /**
+   * Start a drag at a specific element, optionally with an existing ghost.
+   * Used for handoff from another engine.
+   *
+   * @param element - The element to drag
+   * @param pointer - Current pointer position
+   * @param existingGhost - Optional existing ghost element to adopt
+   */
+  startDragAt(element: HTMLElement, pointer: Point, existingGhost?: HTMLElement | null): void {
+    // Cache all item positions
+    const items = this.gridTransforms.cachePositions(this.container);
+
+    // Find the element in the cached items
+    const activeIndex = items.findIndex((item) => item.element === element);
+    if (activeIndex === -1) {
+      console.warn("DragEngine.startDragAt: element not found in grid");
+      existingGhost?.remove();
+      return;
+    }
+
+    const activeItem = items[activeIndex];
+
+    // For adopted drags, we need to adjust startPointer so that slot detection
+    // calculates positions based on where the ghost actually is, not where
+    // the item is rendered in the DOM.
+    let startPointer = pointer;
+    let activeCenter = activeItem.rect.center;
+
+    if (existingGhost) {
+      // Get the ghost's current center position
+      const ghostRect = existingGhost.getBoundingClientRect();
+      const ghostCenter: Point = {
+        x: ghostRect.left + ghostRect.width / 2,
+        y: ghostRect.top + ghostRect.height / 2,
+      };
+
+      // Adjust startPointer so that: activeItem.rect.center + (pointer - startPointer) = ghostCenter
+      // This makes slot detection work correctly based on ghost position
+      startPointer = {
+        x: pointer.x - (ghostCenter.x - activeItem.rect.center.x),
+        y: pointer.y - (ghostCenter.y - activeItem.rect.center.y),
+      };
+      activeCenter = ghostCenter;
+    }
+
+    // Initialize state
+    this.state = {
+      activeItem,
+      startPointer,
+      currentPointer: pointer,
+      previousPointer: pointer,
+      activeCenter,
+      targetIndex: activeIndex,
+    };
+
+    // Adopt existing ghost or create new one
+    if (existingGhost) {
+      this.ghostElement.adopt(existingGhost, pointer);
+    } else {
+      this.ghostElement.create(element, pointer);
+    }
+
+    // Initialize slot detection
+    this.slotDetection.initialize(items, activeIndex);
+
+    // Adopt the pointer tracking (listen for move/up events)
+    this.pointerTracker.adoptDrag();
+
+    // Emit event
+    this.events.onDragStart?.(activeItem);
+  }
+
+  /**
+   * Cancel the current drag operation (cleanup without committing).
+   * @param preserveGhost - If true, don't destroy the ghost element (used for handoff)
+   */
+  cancel(preserveGhost = false): void {
     if (!this.state) return;
 
     // Cleanup without committing changes
-    this.ghostElement.destroy();
+    if (!preserveGhost) {
+      this.ghostElement.destroy();
+    }
     this.gridTransforms.reset();
     this.slotDetection.reset();
+
+    // Clean up pointer tracking to stop receiving events
+    this.pointerTracker.disable();
+    this.pointerTracker.enable(); // Re-enable for future drags
 
     // Note: We don't emit onDragCancel here - the caller handles state cleanup
 
