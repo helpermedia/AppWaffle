@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { DragEngine } from "@/lib/dnd";
-import type { GridItem, DragState, Rect, Point } from "@/lib/dnd";
+import type { GridItem, DragState, Rect, Point, DropAnimationTarget } from "@/lib/dnd";
 
 /** Overlap information for folder creation */
 export interface OverlapInfo {
@@ -38,6 +38,19 @@ export interface DragEndInfo {
   toIndex: number;
 }
 
+/** Callback to complete drag operation and show original item */
+export type DragCompleteCallback = () => void;
+
+/** Info passed to getDropAnimationTarget */
+export interface DropAnimationInfo {
+  /** ID of the item being dragged */
+  activeId: string;
+  /** ID of the target item with highest overlap (if any) */
+  overId: string | null;
+  /** Overlap ratio (0-1) */
+  overlapRatio: number;
+}
+
 interface UseDragGridOptions {
   /** Initial order (null means not yet loaded) */
   initialOrder: string[] | null;
@@ -45,8 +58,14 @@ interface UseDragGridOptions {
   onOrderChange?: (newOrder: string[]) => void;
   /** Called on every drag move (for folder creation detection) */
   onDragMove?: (info: DragMoveInfo) => void;
-  /** Called when drag ends (for folder creation detection) */
-  onDragEnd?: (info: DragEndInfo, reorder: () => void) => void;
+  /** Called when drag ends (for folder creation detection). Must call `complete()` to show original item. */
+  onDragEnd?: (info: DragEndInfo, reorder: () => void, complete: DragCompleteCallback) => void;
+  /**
+   * Called before drop animation to determine animation target.
+   * Return null to skip animation (for folder actions).
+   * Return undefined to use default reorder slot animation.
+   */
+  getDropAnimationTarget?: (info: DropAnimationInfo) => DropAnimationTarget | null | undefined;
 }
 
 interface UseDragGridReturn {
@@ -131,6 +150,7 @@ export function useDragGrid({
   onOrderChange,
   onDragMove,
   onDragEnd,
+  getDropAnimationTarget,
 }: UseDragGridOptions): UseDragGridReturn {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<DragEngine | null>(null);
@@ -145,6 +165,7 @@ export function useDragGrid({
   const onOrderChangeRef = useRef(onOrderChange);
   const onDragMoveRef = useRef(onDragMove);
   const onDragEndRef = useRef(onDragEnd);
+  const getDropAnimationTargetRef = useRef(getDropAnimationTarget);
 
   // Update refs in effect to avoid updating during render
   useEffect(() => {
@@ -152,6 +173,7 @@ export function useDragGrid({
     onOrderChangeRef.current = onOrderChange;
     onDragMoveRef.current = onDragMove;
     onDragEndRef.current = onDragEnd;
+    getDropAnimationTargetRef.current = getDropAnimationTarget;
   });
 
   // Initialize engine
@@ -165,6 +187,33 @@ export function useDragGrid({
       setIsDragging(true);
       setActiveId(item.id);
       setActiveIndex(item.index);
+    });
+
+    // Callback to determine drop animation target
+    engine.on("getDropAnimationTarget", (state: DragState) => {
+      if (!getDropAnimationTargetRef.current) return undefined;
+
+      const items = engine.getItems();
+
+      // Calculate current rect of active item
+      const dx = state.currentPointer.x - state.startPointer.x;
+      const dy = state.currentPointer.y - state.startPointer.y;
+      const activeRect: Rect = {
+        left: state.activeItem.rect.left + dx,
+        top: state.activeItem.rect.top + dy,
+        width: state.activeItem.rect.width,
+        height: state.activeItem.rect.height,
+        center: state.activeCenter,
+      };
+
+      // Find overlap
+      const overlap = findHighestOverlap(activeRect, items, state.activeItem.index);
+
+      return getDropAnimationTargetRef.current({
+        activeId: state.activeItem.id,
+        overId: overlap?.targetId ?? null,
+        overlapRatio: overlap?.ratio ?? 0,
+      });
     });
 
     engine.on("onDragMove", (state: DragState) => {
@@ -220,9 +269,12 @@ export function useDragGrid({
         }
       }
 
-      setIsDragging(false);
-      setActiveId(null);
-      setActiveIndex(null);
+      // Complete callback - shows original item. Must be called by handler.
+      const complete = () => {
+        setIsDragging(false);
+        setActiveId(null);
+        setActiveIndex(null);
+      };
 
       // Create reorder function
       const reorder = () => {
@@ -245,11 +297,13 @@ export function useDragGrid({
             fromIndex,
             toIndex,
           },
-          reorder
+          reorder,
+          complete
         );
       } else {
-        // No external handler, just reorder
+        // No external handler, just reorder and complete
         reorder();
+        complete();
       }
     });
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useDndSettings } from "@/hooks/useConfig";
-import type { DragMoveInfo, DragEndInfo } from "@/hooks/useDragGrid";
+import type { DragMoveInfo, DragEndInfo, DragCompleteCallback } from "@/hooks/useDragGrid";
 
 export type DropAction = "create-folder" | "add-to-folder" | null;
 
@@ -18,7 +18,7 @@ interface UseFolderCreationOptions {
 interface UseFolderCreationReturn {
   dropTarget: DropTargetState | null;
   handleDragMove: (info: DragMoveInfo) => void;
-  handleDragEnd: (info: DragEndInfo, reorder: () => void) => void;
+  handleDragEnd: (info: DragEndInfo, reorder: () => void, complete: DragCompleteCallback) => void;
 }
 
 export function useFolderCreation({
@@ -126,7 +126,7 @@ export function useFolderCreation({
     setDropTarget(null);
   }
 
-  function handleDragEnd(info: DragEndInfo, reorder: () => void) {
+  function handleDragEnd(info: DragEndInfo, reorder: () => void, complete: DragCompleteCallback) {
     const { activeId, overId } = info;
 
     // Clear any pending dwell timer
@@ -137,6 +137,7 @@ export function useFolderCreation({
     setDropTarget(null);
 
     if (!overId || overId === activeId) {
+      complete();
       return;
     }
 
@@ -149,22 +150,28 @@ export function useFolderCreation({
         currentDropTarget?.action === "create-folder" &&
         currentDropTarget.id === overId
       ) {
+        // Folder action - item will be removed from grid, complete after state update
         onCreateFolder(activeId, overId);
+        complete();
       } else {
         // Dwell time didn't pass or target changed, treat as reorder
         reorder();
+        complete();
       }
       return;
     }
 
     // Handle add to folder: app dropped on folder
     if (activeType === "app" && overType === "folder") {
+      // Folder action - item will be removed from grid, complete after state update
       onAddToFolder(overId, activeId);
+      complete();
       return;
     }
 
     // Otherwise, use default reorder behavior
     reorder();
+    complete();
   }
 
   return {

@@ -161,11 +161,24 @@ export class DragEngine {
     const fromIndex = this.state.activeItem.index;
     const toIndex = this.state.targetIndex;
 
-    // Get target slot center for drop animation
-    const targetCenter = this.slotDetection.getSlotCenter(toIndex);
+    // Get animation target from callback, or use default reorder slot
+    let animationTarget = this.events.getDropAnimationTarget?.(this.state);
 
-    // Animate ghost to final position (smooth drop)
-    await this.ghostElement.animateTo(targetCenter, this.options.shiftDuration);
+    // If no callback provided, use default behavior (animate to reorder slot)
+    if (animationTarget === undefined) {
+      const targetCenter = this.slotDetection.getSlotCenter(toIndex);
+      animationTarget = { center: targetCenter, duration: this.options.shiftDuration };
+    }
+
+    // Animate ghost (or destroy immediately if target is null)
+    if (animationTarget) {
+      await this.ghostElement.animateTo(
+        animationTarget.center,
+        animationTarget.duration ?? this.options.shiftDuration
+      );
+    } else {
+      this.ghostElement.destroy();
+    }
 
     // Check if we were destroyed during animation (e.g., component unmounted)
     if (!this.state) return;

@@ -15,4 +15,5 @@ export type {
   DragState,
   DragEvents,
   DragOptions,
+  DropAnimationTarget,
 } from "./types";

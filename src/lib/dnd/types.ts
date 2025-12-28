@@ -37,11 +37,25 @@ export interface DragState {
   targetIndex: number;
 }
 
+/** Drop animation target info */
+export interface DropAnimationTarget {
+  /** Center point to animate ghost to */
+  center: Point;
+  /** Animation duration in ms (default: 200) */
+  duration?: number;
+}
+
 /** Events emitted by DragEngine */
 export interface DragEvents {
   onDragStart?: (item: GridItem) => void;
   onDragMove?: (state: DragState) => void;
   onIndexChange?: (fromIndex: number, toIndex: number) => void;
+  /**
+   * Called before drop animation to get animation target.
+   * Return null to skip animation (ghost destroyed immediately).
+   * Return undefined to use default reorder slot animation.
+   */
+  getDropAnimationTarget?: (state: DragState) => DropAnimationTarget | null | undefined;
   onDragEnd?: (fromIndex: number, toIndex: number) => void;
   onDragCancel?: () => void;
 }

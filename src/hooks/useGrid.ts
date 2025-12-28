@@ -3,11 +3,11 @@ import { useApps } from "@/hooks/useApps";
 import { useDragGrid } from "@/hooks/useDragGrid";
 import { useFolders } from "@/hooks/useFolders";
 import { useFolderCreation } from "@/hooks/useFolderCreation";
-import { useConfig } from "@/hooks/useConfig";
+import { useConfig, useDndSettings } from "@/hooks/useConfig";
 import { isFolderId, resolveFolderApps, convertPhysicalFolders } from "@/utils/folderUtils";
 import type { GridItem } from "@/components/items/AppItem";
 import type { GridFolder } from "@/components/items/FolderItem";
-import type { DragMoveInfo, DragEndInfo } from "@/hooks/useDragGrid";
+import type { DragMoveInfo, DragEndInfo, DropAnimationInfo } from "@/hooks/useDragGrid";
 
 export type GridItemUnion =
   | { type: "app"; data: GridItem }
@@ -143,8 +143,32 @@ export function useGrid() {
   }
 
   // Combined drag end handler
-  function handleDragEnd(info: DragEndInfo, reorder: () => void) {
-    handleFolderDragEnd(info, reorder);
+  function handleDragEnd(info: DragEndInfo, reorder: () => void, complete: () => void) {
+    handleFolderDragEnd(info, reorder, complete);
+  }
+
+  // Get DnD settings for animation control
+  const { overlapThreshold } = useDndSettings();
+
+  // Determine drop animation target - skip animation for folder actions
+  function handleGetDropAnimationTarget(info: DropAnimationInfo) {
+    if (!info.overId || info.overlapRatio < overlapThreshold) {
+      // No significant overlap, use default reorder animation
+      return undefined;
+    }
+
+    // Check if this will be a folder action
+    const activeType = getItemType(info.activeId);
+    const overType = getItemType(info.overId);
+
+    // App over app (potential folder creation) or app over folder (add to folder)
+    // Skip animation - ghost will be destroyed immediately
+    if (activeType === "app" && (overType === "app" || overType === "folder")) {
+      return null;
+    }
+
+    // Default animation
+    return undefined;
   }
 
   // Main drag grid hook
@@ -153,6 +177,7 @@ export function useGrid() {
     onOrderChange: handleMainOrderChange,
     onDragMove: handleDragMove,
     onDragEnd: handleDragEnd,
+    getDropAnimationTarget: handleGetDropAnimationTarget,
   });
 
   // Initialize order once apps/folders load
