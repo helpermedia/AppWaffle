@@ -81,6 +81,20 @@ export class DragEngine {
     return this.gridTransforms.getItems();
   }
 
+  /** Cancel the current drag operation (cleanup without committing) */
+  cancel(): void {
+    if (!this.state) return;
+
+    // Cleanup without committing changes
+    this.ghostElement.destroy();
+    this.gridTransforms.reset();
+    this.slotDetection.reset();
+
+    // Note: We don't emit onDragCancel here - the caller handles state cleanup
+
+    this.state = null;
+  }
+
   private setupPointerCallbacks(): void {
     this.pointerTracker.onDragStart = this.handleDragStart.bind(this);
     this.pointerTracker.onDragMove = this.handleDragMove.bind(this);

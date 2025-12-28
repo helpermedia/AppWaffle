@@ -17,6 +17,7 @@ export function AppWaffle() {
     handleCloseFolder,
     handleRenameFolder,
     handleFolderOrderChange,
+    handleRemoveFromFolder,
     getOpenFolderSavedOrder,
   } = useGrid();
 
@@ -70,6 +71,7 @@ export function AppWaffle() {
           savedOrder={getOpenFolderSavedOrder()}
           onOrderChange={(newOrder) => handleFolderOrderChange(openFolder.id, newOrder)}
           onRename={(newName) => handleRenameFolder(openFolder.id, newName)}
+          onRemoveFromFolder={handleRemoveFromFolder}
           onClose={onCloseFolder}
         />
       )}

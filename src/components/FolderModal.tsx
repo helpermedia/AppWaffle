@@ -9,6 +9,7 @@ interface FolderModalProps {
   savedOrder?: string[];
   onOrderChange?: (newOrder: string[]) => void;
   onRename?: (newName: string) => void;
+  onRemoveFromFolder?: (appId: string) => void;
   onClose: () => void;
 }
 
@@ -17,16 +18,12 @@ export function FolderModal({
   savedOrder,
   onOrderChange,
   onRename,
+  onRemoveFromFolder,
   onClose,
 }: FolderModalProps) {
   // Use saved order if available, otherwise use folder.apps order
   const defaultOrder = folder.apps.map((app) => app.path);
   const initialOrder = savedOrder && savedOrder.length > 0 ? savedOrder : defaultOrder;
-
-  const { containerRef, order, isDragging, activeId } = useDragGrid({
-    initialOrder,
-    onOrderChange,
-  });
 
   const [isClosing, setIsClosing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -34,9 +31,23 @@ export function FolderModal({
   const didFocusRef = useRef(false);
   const isClosingRef = useRef(false);
   const onCloseRef = useRef(onClose);
+  const onRemoveRef = useRef(onRemoveFromFolder);
 
   useEffect(() => {
     onCloseRef.current = onClose;
+    onRemoveRef.current = onRemoveFromFolder;
+  });
+
+  // Handle drag exit - close folder immediately (no animation) when item is dragged out
+  const handleDragExit = (appId: string) => {
+    onRemoveRef.current?.(appId);
+    onCloseRef.current(); // Close immediately, no animation
+  };
+
+  const { containerRef, order, isDragging, activeId } = useDragGrid({
+    initialOrder,
+    onOrderChange,
+    onDragExit: handleDragExit,
   });
 
   function handleClose() {

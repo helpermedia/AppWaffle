@@ -68,6 +68,10 @@ interface UseDragGridOptions {
    * Return undefined to use default reorder slot animation.
    */
   getDropAnimationTarget?: (info: DropAnimationInfo) => DropAnimationTarget | null | undefined;
+  /** Called when item is dropped outside the container bounds */
+  onDragOutside?: (appId: string) => void;
+  /** Called when drag exits container bounds (during drag, not on drop) */
+  onDragExit?: (appId: string) => void;
 }
 
 interface UseDragGridReturn {
@@ -168,6 +172,8 @@ export function useDragGrid({
   onDragMove,
   onDragEnd,
   getDropAnimationTarget,
+  onDragOutside,
+  onDragExit,
 }: UseDragGridOptions): UseDragGridReturn {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<DragEngine | null>(null);
@@ -183,6 +189,8 @@ export function useDragGrid({
   const onDragMoveRef = useRef(onDragMove);
   const onDragEndRef = useRef(onDragEnd);
   const getDropAnimationTargetRef = useRef(getDropAnimationTarget);
+  const onDragOutsideRef = useRef(onDragOutside);
+  const onDragExitRef = useRef(onDragExit);
 
   // Update refs in effect to avoid updating during render
   useEffect(() => {
@@ -191,6 +199,8 @@ export function useDragGrid({
     onDragMoveRef.current = onDragMove;
     onDragEndRef.current = onDragEnd;
     getDropAnimationTargetRef.current = getDropAnimationTarget;
+    onDragOutsideRef.current = onDragOutside;
+    onDragExitRef.current = onDragExit;
   });
 
   // Initialize engine
@@ -234,6 +244,41 @@ export function useDragGrid({
     });
 
     engine.on("onDragMove", (state: DragState) => {
+      // Check if pointer exited container bounds during drag
+      if (onDragExitRef.current) {
+        const containerRect = container.getBoundingClientRect();
+        const pointer = state.currentPointer;
+        const isOutside =
+          pointer.x < containerRect.left ||
+          pointer.x > containerRect.right ||
+          pointer.y < containerRect.top ||
+          pointer.y > containerRect.bottom;
+
+        if (isOutside) {
+          const appId = state.activeItem.id;
+          const currentOrder = orderRef.current;
+
+          // Remove from order
+          if (currentOrder) {
+            const newOrder = currentOrder.filter((id) => id !== appId);
+            setOrder(newOrder);
+            if (onOrderChangeRef.current) {
+              queueMicrotask(() => onOrderChangeRef.current?.(newOrder));
+            }
+          }
+
+          // Cancel the drag and cleanup
+          engine.cancel();
+          setIsDragging(false);
+          setActiveId(null);
+          setActiveIndex(null);
+
+          // Notify parent
+          onDragExitRef.current(appId);
+          return;
+        }
+      }
+
       if (!onDragMoveRef.current) return;
 
       const items = engine.getItems();
@@ -266,8 +311,35 @@ export function useDragGrid({
       const activeItem = items[fromIndex];
       const currentOrder = orderRef.current;
 
-      // Find highest overlap at drop time
+      // Check if dropped outside container bounds
       const state = engine.getState();
+      if (state && onDragOutsideRef.current) {
+        const containerRect = container.getBoundingClientRect();
+        const pointer = state.currentPointer;
+        const isOutside =
+          pointer.x < containerRect.left ||
+          pointer.x > containerRect.right ||
+          pointer.y < containerRect.top ||
+          pointer.y > containerRect.bottom;
+
+        if (isOutside) {
+          // Remove from order and call outside handler
+          if (currentOrder) {
+            const newOrder = currentOrder.filter((id) => id !== activeItem.id);
+            setOrder(newOrder);
+            if (onOrderChangeRef.current) {
+              queueMicrotask(() => onOrderChangeRef.current?.(newOrder));
+            }
+          }
+          setIsDragging(false);
+          setActiveId(null);
+          setActiveIndex(null);
+          onDragOutsideRef.current(activeItem.id);
+          return;
+        }
+      }
+
+      // Find highest overlap at drop time
       let overId: string | null = null;
       let overlapRatio = 0;
 

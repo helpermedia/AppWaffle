@@ -268,6 +268,55 @@ export function useGrid() {
     return folder?.appPaths;
   }
 
+  // Handle removing app from folder (dragged outside)
+  function handleRemoveFromFolder(appId: string) {
+    if (!openFolder || !dragGrid.order) return;
+
+    const folder = folders.find((f) => f.id === openFolder.id);
+    if (!folder) return;
+
+    // Remove app from folder
+    const updatedAppPaths = folder.appPaths.filter((id) => id !== appId);
+
+    // If folder would be empty or have only 1 app, delete it
+    if (updatedAppPaths.length <= 1) {
+      // Add remaining apps back to main grid
+      const newOrder = [...dragGrid.order];
+      const folderIndex = newOrder.indexOf(openFolder.id);
+
+      // Remove folder from order
+      newOrder.splice(folderIndex, 1);
+
+      // Insert remaining apps + the dragged app at folder's position
+      const appsToInsert = [...updatedAppPaths, appId];
+      newOrder.splice(folderIndex, 0, ...appsToInsert);
+
+      // Remove folder from folders list
+      const updatedFolders = folders.filter((f) => f.id !== openFolder.id);
+
+      setFolders(updatedFolders);
+      dragGrid.setOrder(newOrder);
+      saveOrder(newOrder, updatedFolders);
+      setOpenFolder(null);
+    } else {
+      // Folder still has apps, just remove this one
+      const updatedFolders = folders.map((f) =>
+        f.id === openFolder.id ? { ...f, appPaths: updatedAppPaths } : f
+      );
+
+      // Add app back to main grid (at end)
+      const newOrder = [...dragGrid.order, appId];
+
+      // Update open folder view
+      const resolvedApps = resolveFolderApps(updatedAppPaths, appsMap);
+      setOpenFolder({ ...openFolder, apps: resolvedApps });
+
+      setFolders(updatedFolders);
+      dragGrid.setOrder(newOrder);
+      saveOrder(newOrder, updatedFolders);
+    }
+  }
+
   return {
     // Data
     items,
@@ -286,6 +335,7 @@ export function useGrid() {
     handleCloseFolder,
     handleRenameFolder,
     handleFolderOrderChange,
+    handleRemoveFromFolder,
     getOpenFolderSavedOrder,
   };
 }
