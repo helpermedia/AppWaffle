@@ -127,7 +127,7 @@ export function useFolderCreation({
   }
 
   function handleDragEnd(info: DragEndInfo, reorder: () => void, complete: DragCompleteCallback) {
-    const { activeId, overId } = info;
+    const { activeId, overId, overlapRatio } = info;
 
     // Clear any pending dwell timer
     clearHoverTimer();
@@ -136,7 +136,9 @@ export function useFolderCreation({
     const currentDropTarget = dropTarget;
     setDropTarget(null);
 
-    if (!overId || overId === activeId) {
+    // No overlap, overlapping self, or overlap below threshold - just reorder
+    if (!overId || overId === activeId || overlapRatio < overlapThreshold) {
+      reorder();
       complete();
       return;
     }
@@ -162,10 +164,20 @@ export function useFolderCreation({
     }
 
     // Handle add to folder: app dropped on folder
+    // Only if the visual indicator was showing (user was deliberately hovering)
     if (activeType === "app" && overType === "folder") {
-      // Folder action - item will be removed from grid, complete after state update
-      onAddToFolder(overId, activeId);
-      complete();
+      if (
+        currentDropTarget?.action === "add-to-folder" &&
+        currentDropTarget.id === overId
+      ) {
+        // Folder action - item will be removed from grid, complete after state update
+        onAddToFolder(overId, activeId);
+        complete();
+      } else {
+        // Visual indicator wasn't showing, treat as reorder
+        reorder();
+        complete();
+      }
       return;
     }
 

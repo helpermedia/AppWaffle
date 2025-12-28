@@ -12,9 +12,8 @@ export function DropTarget({ action }: DropTargetProps) {
     <div
       className={cn(
         "absolute inset-1 rounded-2xl pointer-events-none z-10",
-        "bg-white/50",
-        "shadow-[0_0_24px_rgba(255,255,255,0.4)]",
-        "transition-all duration-150",
+        "bg-white/20",
+        "animate-pulse-glow",
         action === "create-folder" && "scale-[1.12]",
         action === "add-to-folder" && "scale-105"
       )}

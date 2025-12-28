@@ -56,8 +56,8 @@ export class PointerTracker {
     const item = handle.closest("[data-draggable]");
     if (!item || !(item instanceof HTMLElement)) return;
 
-    // Prevent text selection
-    e.preventDefault();
+    // Don't preventDefault or setPointerCapture here - allow clicks to work normally
+    // We'll do that only when drag actually starts
 
     this.startPoint = { x: e.clientX, y: e.clientY };
     this.activeElement = item;
@@ -67,9 +67,6 @@ export class PointerTracker {
     document.addEventListener("pointermove", this.handlePointerMove);
     document.addEventListener("pointerup", this.handlePointerUp);
     document.addEventListener("pointercancel", this.handlePointerCancel);
-
-    // Capture pointer for reliable tracking
-    this.container.setPointerCapture(e.pointerId);
   }
 
   private handlePointerMove(e: PointerEvent): void {
@@ -86,11 +83,17 @@ export class PointerTracker {
 
       if (distance >= PointerTracker.ACTIVATION_DISTANCE) {
         this.isDragging = true;
+        // Prevent text selection and capture pointer now that drag has started
+        e.preventDefault();
+        if (this.pointerId !== null) {
+          this.container.setPointerCapture(this.pointerId);
+        }
         this.onDragStart?.(this.activeElement, this.startPoint);
       }
     }
 
     if (this.isDragging) {
+      e.preventDefault();
       this.onDragMove?.(currentPoint);
     }
   }

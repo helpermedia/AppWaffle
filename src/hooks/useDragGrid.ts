@@ -32,6 +32,8 @@ export interface DragEndInfo {
   activeId: string;
   /** ID of the target item (highest overlap) */
   overId: string | null;
+  /** Overlap ratio with target (0-1) */
+  overlapRatio: number;
   /** From index */
   fromIndex: number;
   /** To index (from center-crossing detection) */
@@ -110,17 +112,32 @@ function calculateOverlap(activeRect: Rect, targetRect: Rect): number {
 }
 
 /**
- * Find the item with highest overlap (excluding the active item).
+ * Check if an item is shifted (between active and target indices).
+ * Shifted items use CSS transforms and their cached rects are not accurate.
+ */
+function isItemShifted(itemIndex: number, activeIndex: number, targetIndex: number): boolean {
+  if (activeIndex === targetIndex) return false;
+  const minIdx = Math.min(activeIndex, targetIndex);
+  const maxIdx = Math.max(activeIndex, targetIndex);
+  // Items between active and target (exclusive of active) are shifted
+  return itemIndex > minIdx && itemIndex <= maxIdx;
+}
+
+/**
+ * Find the item with highest overlap (excluding the active item and shifted items).
  */
 function findHighestOverlap(
   activeRect: Rect,
   items: GridItem[],
-  activeIndex: number
+  activeIndex: number,
+  targetIndex: number = activeIndex
 ): OverlapInfo | null {
   let highest: OverlapInfo | null = null;
 
   for (const item of items) {
+    // Skip active item and shifted items (their cached positions are invalid)
     if (item.index === activeIndex) continue;
+    if (isItemShifted(item.index, activeIndex, targetIndex)) continue;
 
     const ratio = calculateOverlap(activeRect, item.rect);
     if (ratio > 0 && (highest === null || ratio > highest.ratio)) {
@@ -206,8 +223,8 @@ export function useDragGrid({
         center: state.activeCenter,
       };
 
-      // Find overlap
-      const overlap = findHighestOverlap(activeRect, items, state.activeItem.index);
+      // Find overlap (skip shifted items - their cached positions are invalid)
+      const overlap = findHighestOverlap(activeRect, items, state.activeItem.index, state.targetIndex);
 
       return getDropAnimationTargetRef.current({
         activeId: state.activeItem.id,
@@ -232,8 +249,8 @@ export function useDragGrid({
         center: state.activeCenter,
       };
 
-      // Find overlap for folder creation
-      const overlap = findHighestOverlap(activeRect, items, state.activeItem.index);
+      // Find overlap for folder creation (skip shifted items)
+      const overlap = findHighestOverlap(activeRect, items, state.activeItem.index, state.targetIndex);
 
       onDragMoveRef.current({
         activeId: state.activeItem.id,
@@ -252,6 +269,7 @@ export function useDragGrid({
       // Find highest overlap at drop time
       const state = engine.getState();
       let overId: string | null = null;
+      let overlapRatio = 0;
 
       if (state) {
         const dx = state.currentPointer.x - state.startPointer.x;
@@ -263,9 +281,10 @@ export function useDragGrid({
           height: state.activeItem.rect.height,
           center: state.activeCenter,
         };
-        const overlap = findHighestOverlap(activeRect, items, fromIndex);
+        const overlap = findHighestOverlap(activeRect, items, fromIndex, toIndex);
         if (overlap) {
           overId = overlap.targetId;
+          overlapRatio = overlap.ratio;
         }
       }
 
@@ -294,6 +313,7 @@ export function useDragGrid({
           {
             activeId: activeItem?.id ?? "",
             overId,
+            overlapRatio,
             fromIndex,
             toIndex,
           },
