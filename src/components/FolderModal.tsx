@@ -3,7 +3,7 @@ import { AppItem, type GridItem } from "@/components/items/AppItem";
 import { useDragGrid, type DragMoveInfo } from "@/hooks/useDragGrid";
 import { type GridFolder } from "@/components/items/FolderItem";
 import { cn } from "@/utils/cn";
-import type { DragCoordinator } from "@/lib/dnd";
+import type { DragCoordinator } from "@/lib/helper-dnd";
 
 interface FolderModalProps {
   folder: GridFolder;

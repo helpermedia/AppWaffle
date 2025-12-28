@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { DragEngine } from "@/lib/dnd";
-import type { GridItem, DragState, Rect, Point, DropAnimationTarget } from "@/lib/dnd";
+import { DragEngine } from "@/lib/helper-dnd";
+import type { GridItem, DragState, Rect, Point, DropAnimationTarget } from "@/lib/helper-dnd";
 
 /** Overlap information for folder creation */
 export interface OverlapInfo {

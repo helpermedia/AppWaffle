@@ -283,7 +283,7 @@ interface DropAnimationTarget {
 Coordinates drag handoff between multiple grids (e.g., main grid and folder modal).
 
 ```typescript
-import { DragCoordinator } from '@appwaffle/dnd';
+import { DragCoordinator } from 'helper-dnd';
 
 const coordinator = new DragCoordinator({
   onHandoff: async (request) => {
@@ -411,7 +411,7 @@ import {
   GhostElement,
   SlotDetection,
   GridTransforms,
-} from '@appwaffle/dnd';
+} from 'helper-dnd';
 ```
 
 ## Browser Support
