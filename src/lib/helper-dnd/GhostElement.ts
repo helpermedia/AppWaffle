@@ -122,7 +122,6 @@ export class GhostElement {
   /**
    * Animate ghost to target center position, then destroy.
    * Returns a Promise that resolves when animation completes.
-   * Used for smooth drop animation.
    */
   animateTo(targetCenter: Point, duration: number = 200): Promise<void> {
     return new Promise((resolve) => {
@@ -141,7 +140,7 @@ export class GhostElement {
       // Animate to target position (scale back to 1)
       this.element.style.transform = `translate3d(${targetX}px, ${targetY}px, 0) scale(1)`;
 
-      // Clean up after animation (check element still exists in case of early destroy)
+      // Clean up after animation
       setTimeout(() => {
         if (this.element) {
           this.destroy();

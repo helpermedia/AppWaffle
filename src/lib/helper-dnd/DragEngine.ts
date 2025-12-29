@@ -81,6 +81,15 @@ export class DragEngine {
     return this.state;
   }
 
+  /**
+   * Reset transforms on all items.
+   * Call from React's useLayoutEffect after reorder to clear transforms
+   * synchronously before browser paint.
+   */
+  resetTransforms(): void {
+    this.gridTransforms.reset();
+  }
+
   /** Get all cached grid items */
   getItems(): GridItem[] {
     return this.gridTransforms.getItems();
@@ -303,11 +312,15 @@ export class DragEngine {
     // Check if we were destroyed during animation (e.g., component unmounted)
     if (!this.state) return;
 
-    // Reset transforms
-    this.gridTransforms.reset();
+    // Clear slot detection (doesn't affect visuals)
     this.slotDetection.reset();
 
-    // Emit event - React will update state and show original via isDragging prop
+    // NOTE: Don't reset transforms here! Let React re-render first.
+    // The React hook will call resetTransforms() in useLayoutEffect after
+    // React commits the new order, ensuring transforms are cleared only
+    // after items are in their new DOM positions.
+
+    // Emit event - React will update state and reorder items
     this.events.onDragEnd?.(fromIndex, toIndex);
 
     this.state = null;

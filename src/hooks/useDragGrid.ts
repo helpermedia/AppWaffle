@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DragEngine } from "@/lib/helper-dnd";
 import type { GridItem, DragState, Rect, Point, DropAnimationTarget } from "@/lib/helper-dnd";
 
@@ -415,6 +415,20 @@ export function useDragGrid({
       engineRef.current = null;
     };
   }, []); // Only run on mount
+
+  // Track previous dragging state to detect when drag ends
+  const wasDraggingRef = useRef(false);
+
+  // Reset transforms synchronously after React commits the new order.
+  // This runs BEFORE browser paint, ensuring no flash between
+  // DOM reorder and transform reset.
+  useLayoutEffect(() => {
+    if (wasDraggingRef.current && !isDragging) {
+      // Drag just ended - reset transforms now that React has committed
+      engineRef.current?.resetTransforms();
+    }
+    wasDraggingRef.current = isDragging;
+  }, [isDragging]);
 
   return {
     containerRef,
