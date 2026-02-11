@@ -12,6 +12,9 @@ use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 /// In-memory order state - updated on every change, saved to disk only on exit
 static ORDER_STATE: Mutex<Option<OrderConfig>> = Mutex::new(None);
 
+/// Serializes disk writes so concurrent save_order_to_disk() calls don't interleave
+static SAVE_LOCK: Mutex<()> = Mutex::new(());
+
 #[cfg(target_os = "macos")]
 use objc2::{msg_send, runtime::AnyObject, MainThreadMarker};
 #[cfg(target_os = "macos")]
@@ -282,9 +285,15 @@ fn update_order(main: Vec<String>, folders: Vec<FolderMetadata>) {
 
 /// Save in-memory order state to disk (called on window close)
 fn save_order_to_disk() -> Result<(), String> {
-    let state = ORDER_STATE.lock().unwrap();
-    let Some(order) = state.as_ref() else {
-        return Ok(()); // Nothing to save
+    let _save_guard = SAVE_LOCK.lock().unwrap();
+
+    // Clone the order and release ORDER_STATE quickly to avoid blocking update_order
+    let order = {
+        let state = ORDER_STATE.lock().unwrap();
+        match state.as_ref() {
+            Some(order) => order.clone(),
+            None => return Ok(()), // Nothing to save
+        }
     };
 
     let config_dir = get_config_dir()
@@ -295,7 +304,7 @@ fn save_order_to_disk() -> Result<(), String> {
 
     let config = AppConfig {
         version: 1,
-        order: order.clone(),
+        order,
     };
 
     let config_path = get_config_path().unwrap();
