@@ -202,26 +202,26 @@ fn save_icon_to_cache(app_path: &str, png_bytes: &[u8]) -> Option<PathBuf> {
 /// Get icon using NSWorkspace via Swift (handles all icon types on macOS)
 #[cfg(target_os = "macos")]
 fn get_icon_nsworkspace_bytes(app_path: &str) -> Option<Vec<u8>> {
-    let swift_code = format!(
-        r#"
+    let swift_code = r#"
 import Cocoa
 import Foundation
 
+guard CommandLine.arguments.count > 1 else { exit(1) }
+let path = CommandLine.arguments[1]
 let workspace = NSWorkspace.shared
-let icon = workspace.icon(forFile: "{}")
+let icon = workspace.icon(forFile: path)
 icon.size = NSSize(width: 128, height: 128)
 
 let cgImage = icon.cgImage(forProposedRect: nil, context: nil, hints: nil)!
 let bitmap = NSBitmapImageRep(cgImage: cgImage)
 let pngData = bitmap.representation(using: .png, properties: [:])!
 print(pngData.base64EncodedString())
-"#,
-        app_path.replace("\"", "\\\"")
-    );
+"#;
 
     let output = Command::new("swift")
         .arg("-e")
-        .arg(&swift_code)
+        .arg(swift_code)
+        .arg(app_path)
         .output()
         .ok()?;
 
@@ -278,9 +278,36 @@ async fn load_config() -> Result<AppConfig, String> {
 /// Update order in memory (called on every change from frontend)
 /// Disk write happens only on window close for safety
 #[tauri::command]
-fn update_order(main: Vec<String>, folders: Vec<FolderMetadata>) {
+fn update_order(main: Vec<String>, folders: Vec<FolderMetadata>) -> Result<(), String> {
+    const MAX_MAIN_ENTRIES: usize = 1000;
+    const MAX_FOLDERS: usize = 200;
+    const MAX_FOLDER_APPS: usize = 500;
+    const MAX_STRING_LEN: usize = 1024;
+
+    if main.len() > MAX_MAIN_ENTRIES {
+        return Err("Too many main entries".to_string());
+    }
+    if folders.len() > MAX_FOLDERS {
+        return Err("Too many folders".to_string());
+    }
+    if main.iter().any(|s| s.len() > MAX_STRING_LEN) {
+        return Err("Main entry too long".to_string());
+    }
+    for folder in &folders {
+        if folder.id.len() > MAX_STRING_LEN || folder.name.len() > MAX_STRING_LEN {
+            return Err("Folder field too long".to_string());
+        }
+        if folder.app_paths.len() > MAX_FOLDER_APPS {
+            return Err("Too many apps in folder".to_string());
+        }
+        if folder.app_paths.iter().any(|s| s.len() > MAX_STRING_LEN) {
+            return Err("Folder app path too long".to_string());
+        }
+    }
+
     let order = OrderConfig { main, folders };
     *ORDER_STATE.lock().unwrap() = Some(order);
+    Ok(())
 }
 
 /// Save in-memory order state to disk (called on window close)
@@ -389,8 +416,23 @@ async fn get_apps() -> Result<AppsResponse, String> {
 
 #[tauri::command]
 async fn launch_app(path: String) -> Result<(), String> {
+    let path_buf = PathBuf::from(&path);
+
+    let canonical = path_buf
+        .canonicalize()
+        .map_err(|_| "Invalid app path".to_string())?;
+
+    if !canonical.extension().map_or(false, |ext| ext == "app") {
+        return Err("Invalid app path".to_string());
+    }
+
+    let allowed = get_applications_dirs();
+    if !allowed.iter().any(|dir| canonical.starts_with(dir)) {
+        return Err("App not in allowed directory".to_string());
+    }
+
     Command::new("open")
-        .arg(&path)
+        .arg(canonical)
         .spawn()
         .map_err(|e| format!("Failed to launch app: {}", e))?;
 
@@ -464,9 +506,11 @@ pub fn run() {
                                 let ns_view = appkit.ns_view.as_ptr() as *mut AnyObject;
                                 let ns_window: *mut NSWindow = msg_send![ns_view, window];
 
-                                (*ns_window).setFrame_display(frame, true);
-                                (*ns_window).setLevel(19);
-                                (*ns_window).setHasShadow(false);
+                                if !ns_window.is_null() {
+                                    (*ns_window).setFrame_display(frame, true);
+                                    (*ns_window).setLevel(19);
+                                    (*ns_window).setHasShadow(false);
+                                }
                             }
                         }
                     }
