@@ -313,6 +313,13 @@ export function useDragGrid({
       const activeItem = items[fromIndex];
       const currentOrder = orderRef.current;
 
+      if (!activeItem) {
+        setIsDragging(false);
+        setActiveId(null);
+        setActiveIndex(null);
+        return;
+      }
+
       // Check if dropped outside container bounds
       const state = engine.getState();
       if (state && onDragOutsideRef.current) {
@@ -385,7 +392,7 @@ export function useDragGrid({
       if (onDragEndRef.current) {
         onDragEndRef.current(
           {
-            activeId: activeItem?.id ?? "",
+            activeId: activeItem.id,
             overId,
             overlapRatio,
             fromIndex,

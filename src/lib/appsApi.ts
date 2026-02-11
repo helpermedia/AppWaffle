@@ -16,4 +16,5 @@ export function getAppsPromise(): Promise<AppsResponse> {
 }
 
 // Start fetching immediately when module is imported
-getAppsPromise();
+// Swallow here — error is re-thrown when use() is called during render
+getAppsPromise().catch(() => {});
