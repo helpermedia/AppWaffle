@@ -201,6 +201,8 @@ export function useDragGrid({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
+  const getEngine = () => engineRef.current;
+
   // Keep refs for callbacks to avoid stale closures
   const orderRef = useLatestRef(order);
   const onOrderChangeRef = useLatestRef(onOrderChange);
@@ -413,6 +415,6 @@ export function useDragGrid({
     isDragging,
     activeId,
     activeIndex,
-    getEngine: () => engineRef.current,
+    getEngine,
   };
 }

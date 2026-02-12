@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { DragCoordinator } from "@/lib/helper-dnd";
 import type { HandoffRequest } from "@/lib/helper-dnd";
 import { useLatestRef } from "@/hooks/useLatestRef";
@@ -33,15 +33,6 @@ export function useDragHandoff({
 }: UseDragHandoffOptions) {
   const [coordinator] = useState(() => new DragCoordinator({}));
 
-  // Ref to hold the current handoff handler (set in effect to avoid render-time ref access)
-  const handoffHandlerRef = useRef<((request: HandoffRequest) => Promise<void> | void) | null>(null);
-
-  // Wire up the coordinator's onHandoff to call through the ref (once on mount)
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability -- Coordinator is mutable by design
-    coordinator.onHandoff = (request) => handoffHandlerRef.current?.(request);
-  }, [coordinator]);
-
   // Refs for handoff callback to access current state
   const openFolderRef = useLatestRef(openFolder);
   const foldersRef = useLatestRef(folders);
@@ -50,9 +41,11 @@ export function useDragHandoff({
   const setFoldersRef = useLatestRef(setFolders);
   const setOpenFolderRef = useLatestRef(setOpenFolder);
 
-  // Update handoff handler every render
+  // Wire up the coordinator's onHandoff (once on mount).
+  // All values accessed via stable refs — no need to recreate on every render.
   useEffect(() => {
-    handoffHandlerRef.current = async (request: HandoffRequest) => {
+    // eslint-disable-next-line react-hooks/immutability -- Coordinator is mutable by design
+    coordinator.onHandoff = async (request: HandoffRequest) => {
       const currentOpenFolder = openFolderRef.current;
       const currentDragGrid = dragGridRef.current;
       const currentFolders = foldersRef.current;
@@ -73,7 +66,7 @@ export function useDragHandoff({
       saveOrderRef.current(newOrder, updatedFolders);
       setOpenFolderRef.current(null);
     };
-  });
+  }, [coordinator, openFolderRef, foldersRef, dragGridRef, saveOrderRef, setFoldersRef, setOpenFolderRef]);
 
   // Register main grid with coordinator when engine is available
   useEffect(() => {

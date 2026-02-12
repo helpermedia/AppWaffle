@@ -62,7 +62,7 @@ export function FolderModal({
     onDragMove: handleDragMove,
   });
 
-  // Reset handoff flag when drag ends
+  // Reset handoff flag when drag ends (useEffect required — linter forbids ref writes during render)
   useEffect(() => {
     if (!isDragging) {
       handoffTriggeredRef.current = false;
@@ -92,7 +92,8 @@ export function FolderModal({
         coordinator.setActiveGrid(null);
       }
     };
-  }, [coordinator, getEngine, containerRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getEngine called fresh; containerRef is stable
+  }, [coordinator, containerRef]);
 
   function handleClose() {
     if (!triggerClose()) return;
