@@ -12,6 +12,10 @@ use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 /// In-memory order state - updated on every change, saved to disk only on exit
 static ORDER_STATE: Mutex<Option<OrderConfig>> = Mutex::new(None);
 
+/// macOS window level above Dock and menu bar (Launchpad-style).
+/// Corresponds to kCGPopUpMenuWindowLevelKey (private API).
+const LAUNCHPAD_WINDOW_LEVEL: isize = 19;
+
 /// Serializes disk writes so concurrent save_order_to_disk() calls don't interleave
 static SAVE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -299,17 +303,17 @@ fn update_order(main: Vec<String>, folders: Vec<FolderMetadata>) -> Result<(), S
     }
 
     let order = OrderConfig { main, folders };
-    *ORDER_STATE.lock().expect("ORDER_STATE mutex poisoned") = Some(order);
+    *ORDER_STATE.lock().unwrap_or_else(|p| p.into_inner()) = Some(order);
     Ok(())
 }
 
 /// Save in-memory order state to disk (called on window close)
 fn save_order_to_disk() -> Result<(), String> {
-    let _save_guard = SAVE_LOCK.lock().expect("SAVE_LOCK mutex poisoned");
+    let _save_guard = SAVE_LOCK.lock().unwrap_or_else(|p| p.into_inner());
 
     // Clone the order and release ORDER_STATE quickly to avoid blocking update_order
     let order = {
-        let state = ORDER_STATE.lock().expect("ORDER_STATE mutex poisoned");
+        let state = ORDER_STATE.lock().unwrap_or_else(|p| p.into_inner());
         match state.as_ref() {
             Some(order) => order.clone(),
             None => return Ok(()), // Nothing to save
@@ -332,8 +336,11 @@ fn save_order_to_disk() -> Result<(), String> {
     let json = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-    fs::write(&config_path, json)
-        .map_err(|e| format!("Failed to write config: {}", e))?;
+    let tmp_path = config_path.with_extension("json.tmp");
+    fs::write(&tmp_path, json)
+        .map_err(|e| format!("Failed to write temp config: {}", e))?;
+    fs::rename(&tmp_path, &config_path)
+        .map_err(|e| format!("Failed to rename config: {}", e))?;
 
     Ok(())
 }
@@ -504,7 +511,7 @@ pub fn run() {
 
                                 if !ns_window.is_null() {
                                     (*ns_window).setFrame_display(frame, true);
-                                    (*ns_window).setLevel(19);
+                                    (*ns_window).setLevel(LAUNCHPAD_WINDOW_LEVEL);
                                     (*ns_window).setHasShadow(false);
                                 }
                             }

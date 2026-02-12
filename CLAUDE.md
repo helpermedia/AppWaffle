@@ -69,6 +69,12 @@ This project uses React 19. Key principles:
 - **Actions**: Use `useTransition` or form `action` prop for async mutations
 - **Simplified patterns**: `ref` as prop (no `forwardRef`), `<Context value="">` syntax
 - **Local state first**: Only lift state or use context when truly needed
+- **Avoid unnecessary `useEffect`**: Most things do NOT need `useEffect`. Before adding one, consider:
+  - **Derived values**: Compute during render, not in an effect (`const x = items.filter(...)`)
+  - **State from props**: Call `setState` during render — React bails out and retries synchronously, no flash. `useEffect` would commit a render with stale values first
+  - **Resetting state on prop change**: Use `key` prop to remount instead of an effect
+  - **One-time setup**: Use refs with guards, not effects
+  - **Only use `useEffect` for**: subscriptions, DOM manipulation, timers, and external system sync
 
 For detailed patterns and code examples, use the `/react` skill.
 
