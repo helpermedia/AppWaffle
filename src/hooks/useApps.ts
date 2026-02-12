@@ -74,8 +74,8 @@ export function useApps(): UseAppsResult {
     }
 
     return () => {
-      clearInterval(interval);
       cancelled = true;
+      clearInterval(interval);
     };
   }, [initialData]);
 

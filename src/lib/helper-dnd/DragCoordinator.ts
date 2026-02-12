@@ -181,6 +181,8 @@ export class DragCoordinator {
     console.log("[Handoff] Starting", { from: this.activeGridId, to: toGridId, itemId });
     this.isHandingOff = true;
 
+    let ghost: HTMLElement | null = null;
+
     try {
       // Get the drag state before canceling
       const state = fromGrid.engine.getState();
@@ -192,7 +194,7 @@ export class DragCoordinator {
 
       // Detach the ghost element - this transfers ownership to us
       // so the engine's destroy() won't remove it from DOM
-      const ghost = fromGrid.engine.detachGhost();
+      ghost = fromGrid.engine.detachGhost();
       if (!ghost) {
         console.log("[Handoff] No ghost element");
         this.isHandingOff = false;
@@ -246,6 +248,7 @@ export class DragCoordinator {
       return true;
     } catch (error) {
       console.error("[Handoff] Failed", error);
+      ghost?.remove();
       this.isHandingOff = false;
       return false;
     }
