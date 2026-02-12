@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useGrid } from "@/hooks/useGrid";
+import { useCloseAnimation } from "@/hooks/useCloseAnimation";
 import { AppItem } from "@/components/items/AppItem";
 import { FolderItem } from "@/components/items/FolderItem";
 import { FolderModal } from "@/components/FolderModal";
@@ -25,8 +26,7 @@ export function AppWaffle() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const savedScrollTop = useRef(0);
   const [launchingPath, setLaunchingPath] = useState<string | null>(null);
-  const [isClosing, setIsClosing] = useState(false);
-  const isClosingRef = useRef(false);
+  const { isClosing, setIsClosing, isClosingRef, triggerClose } = useCloseAnimation();
 
   // Save scroll position when opening folder
   function onOpenFolder(folder: Parameters<typeof handleOpenFolder>[0]) {
@@ -50,9 +50,7 @@ export function AppWaffle() {
   const CLOSE_ANIMATION_MS = 300;
 
   function closeApp() {
-    if (isClosingRef.current) return;
-    isClosingRef.current = true;
-    setIsClosing(true);
+    if (!triggerClose()) return;
     invoke("quit_after_delay", { delayMs: CLOSE_ANIMATION_MS });
   }
 

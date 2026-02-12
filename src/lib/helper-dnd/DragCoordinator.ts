@@ -1,5 +1,5 @@
 import type { DragEngine } from "./DragEngine";
-import type { Point } from "./types";
+import { isPointOutsideRect, type Point } from "./types";
 
 /**
  * Registration info for a grid participating in coordinated drag.
@@ -120,14 +120,7 @@ export class DragCoordinator {
 
     const activeRect = activeGrid.container.getBoundingClientRect();
 
-    // Check if pointer is outside active container
-    const isOutside =
-      pointer.x < activeRect.left ||
-      pointer.x > activeRect.right ||
-      pointer.y < activeRect.top ||
-      pointer.y > activeRect.bottom;
-
-    if (!isOutside) return null;
+    if (!isPointOutsideRect(pointer, activeRect)) return null;
 
     // Pointer is outside active grid - find target grid
     // First, try to find a grid that contains the pointer

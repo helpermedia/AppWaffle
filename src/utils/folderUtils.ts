@@ -37,6 +37,50 @@ export function resolveFolderApps(
 }
 
 /**
+ * Resolve an ordered list of IDs into app items, skipping unknown IDs.
+ */
+export function resolveOrderToAppItems(
+  order: string[],
+  appsMap: Map<string, AppInfo>
+): (AppInfo & { id: string })[] {
+  return order
+    .map((id) => {
+      const app = appsMap.get(id);
+      return app ? { ...app, id } : null;
+    })
+    .filter((item): item is AppInfo & { id: string } => item !== null);
+}
+
+/**
+ * Dissolve a folder back into individual apps in the main grid order.
+ * Replaces the folder entry with the given apps at the folder's position.
+ */
+export function dissolveFolder(
+  folderId: string,
+  order: string[],
+  currentFolders: FolderMetadata[],
+  appsToInsert: string[]
+): { newOrder: string[]; updatedFolders: FolderMetadata[] } {
+  const newOrder = [...order];
+  const folderIndex = newOrder.indexOf(folderId);
+  newOrder.splice(folderIndex, 1);
+  newOrder.splice(folderIndex, 0, ...appsToInsert);
+  const updatedFolders = currentFolders.filter((f) => f.id !== folderId);
+  return { newOrder, updatedFolders };
+}
+
+/**
+ * Return a new folders array with one folder updated by id.
+ */
+export function updateFolderById(
+  folders: FolderMetadata[],
+  id: string,
+  updates: Partial<FolderMetadata>
+): FolderMetadata[] {
+  return folders.map((f) => (f.id === id ? { ...f, ...updates } : f));
+}
+
+/**
  * Convert physical folders (from disk) to FolderMetadata format.
  * Used on first launch to initialize folders from filesystem.
  */

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { DragEngine } from "@/lib/helper-dnd";
+import { DragEngine, isPointOutsideRect } from "@/lib/helper-dnd";
 import type { GridItem, DragState, Rect, Point, DropAnimationTarget } from "@/lib/helper-dnd";
 
 /** Overlap information for folder creation */
@@ -250,13 +250,8 @@ export function useDragGrid({
       if (onDragExitRef.current) {
         const containerRect = container.getBoundingClientRect();
         const pointer = state.currentPointer;
-        const isOutside =
-          pointer.x < containerRect.left ||
-          pointer.x > containerRect.right ||
-          pointer.y < containerRect.top ||
-          pointer.y > containerRect.bottom;
 
-        if (isOutside) {
+        if (isPointOutsideRect(pointer, containerRect)) {
           const appId = state.activeItem.id;
           const currentOrder = orderRef.current;
 
@@ -325,13 +320,8 @@ export function useDragGrid({
       if (state && onDragOutsideRef.current) {
         const containerRect = container.getBoundingClientRect();
         const pointer = state.currentPointer;
-        const isOutside =
-          pointer.x < containerRect.left ||
-          pointer.x > containerRect.right ||
-          pointer.y < containerRect.top ||
-          pointer.y > containerRect.bottom;
 
-        if (isOutside) {
+        if (isPointOutsideRect(pointer, containerRect)) {
           // Remove from order and call outside handler
           if (currentOrder) {
             const newOrder = currentOrder.filter((id) => id !== activeItem.id);

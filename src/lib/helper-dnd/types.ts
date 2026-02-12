@@ -60,6 +60,16 @@ export interface DragEvents {
   onDragCancel?: () => void;
 }
 
+/** Check if a point is outside a DOMRect */
+export function isPointOutsideRect(point: Point, rect: DOMRect): boolean {
+  return (
+    point.x < rect.left ||
+    point.x > rect.right ||
+    point.y < rect.top ||
+    point.y > rect.bottom
+  );
+}
+
 /** Configuration options */
 export interface DragOptions {
   /** Minimum pixels to move before drag starts (default: 5) */

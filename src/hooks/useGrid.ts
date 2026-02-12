@@ -4,7 +4,7 @@ import { useDragGrid } from "@/hooks/useDragGrid";
 import { useFolders } from "@/hooks/useFolders";
 import { useFolderCreation } from "@/hooks/useFolderCreation";
 import { useConfig, useDndSettings } from "@/hooks/useConfig";
-import { isFolderId, resolveFolderApps, convertPhysicalFolders } from "@/utils/folderUtils";
+import { isFolderId, resolveFolderApps, resolveOrderToAppItems, convertPhysicalFolders, dissolveFolder, updateFolderById } from "@/utils/folderUtils";
 import { DragCoordinator } from "@/lib/helper-dnd";
 import type { HandoffRequest } from "@/lib/helper-dnd";
 import type { GridItem } from "@/components/items/AppItem";
@@ -56,21 +56,21 @@ export function useGrid() {
   function buildItems(order: string[] | null): GridItemUnion[] {
     if (!order) return [];
     const foldersMap = new Map(folders.map((f) => [f.id, f]));
+    const resolvedApps = new Map(
+      resolveOrderToAppItems(order, appsMap).map((item) => [item.id, item])
+    );
 
     return order
       .map((id): GridItemUnion | null => {
-        // Check if it's an app
-        const app = appsMap.get(id);
-        if (app) return { type: "app", data: { ...app, id } };
+        const appItem = resolvedApps.get(id);
+        if (appItem) return { type: "app", data: appItem };
 
-        // Check if it's a folder
         if (isFolderId(id)) {
           const folder = foldersMap.get(id);
           if (folder) {
-            const resolvedApps = resolveFolderApps(folder.appPaths, appsMap);
             return {
               type: "folder",
-              data: { id, name: folder.name, apps: resolvedApps },
+              data: { id, name: folder.name, apps: resolveFolderApps(folder.appPaths, appsMap) },
             };
           }
         }
@@ -129,9 +129,7 @@ export function useGrid() {
 
     // Add app to folder
     const updatedAppPaths = [...existingFolder.appPaths, appId];
-    const updatedFolders = folders.map((f) =>
-      f.id === folderId ? { ...f, appPaths: updatedAppPaths } : f
-    );
+    const updatedFolders = updateFolderById(folders, folderId, { appPaths: updatedAppPaths });
 
     // Open folder modal
     const resolvedApps = resolveFolderApps(updatedAppPaths, appsMap);
@@ -237,19 +235,17 @@ export function useGrid() {
     let updatedFolders: typeof currentFolders;
 
     if (updatedAppPaths.length <= 1) {
-      // Folder becomes empty or has only 1 app - delete folder
-      newOrder = [...currentDragGrid.order];
-      const folderIndex = newOrder.indexOf(currentOpenFolder.id);
-      newOrder.splice(folderIndex, 1);
-      // Insert remaining apps + dragged app at folder's position
-      newOrder.splice(folderIndex, 0, ...updatedAppPaths, request.itemId);
-      updatedFolders = currentFolders.filter((f) => f.id !== currentOpenFolder.id);
+      // Folder becomes empty or has only 1 app - dissolve folder
+      ({ newOrder, updatedFolders } = dissolveFolder(
+        currentOpenFolder.id,
+        currentDragGrid.order,
+        currentFolders,
+        [...updatedAppPaths, request.itemId]
+      ));
     } else {
       // Folder still has apps - add dragged app to end of main grid
       newOrder = [...currentDragGrid.order, request.itemId];
-      updatedFolders = currentFolders.map((f) =>
-        f.id === currentOpenFolder.id ? { ...f, appPaths: updatedAppPaths } : f
-      );
+      updatedFolders = updateFolderById(currentFolders, currentOpenFolder.id, { appPaths: updatedAppPaths });
     }
 
     // Update state synchronously
@@ -326,9 +322,7 @@ export function useGrid() {
 
   function handleFolderOrderChange(folderId: string, newOrder: string[]) {
     // Update folder's app order
-    const updatedFolders = folders.map((f) =>
-      f.id === folderId ? { ...f, appPaths: newOrder } : f
-    );
+    const updatedFolders = updateFolderById(folders, folderId, { appPaths: newOrder });
     setFolders(updatedFolders);
     if (dragGrid.order) {
       saveOrder(dragGrid.order, updatedFolders);
@@ -341,9 +335,7 @@ export function useGrid() {
 
   function handleRenameFolder(folderId: string, newName: string) {
     // Compute updated folders from current folders (which may come from orderConfig)
-    const updatedFolders = folders.map((f) =>
-      f.id === folderId ? { ...f, name: newName } : f
-    );
+    const updatedFolders = updateFolderById(folders, folderId, { name: newName });
 
     // Update local state
     setFolders(updatedFolders);
@@ -376,21 +368,14 @@ export function useGrid() {
     // Remove app from folder
     const updatedAppPaths = folder.appPaths.filter((id) => id !== appId);
 
-    // If folder would be empty or have only 1 app, delete it
+    // If folder would be empty or have only 1 app, dissolve it
     if (updatedAppPaths.length <= 1) {
-      // Add remaining apps back to main grid
-      const newOrder = [...dragGrid.order];
-      const folderIndex = newOrder.indexOf(openFolder.id);
-
-      // Remove folder from order
-      newOrder.splice(folderIndex, 1);
-
-      // Insert remaining apps + the dragged app at folder's position
-      const appsToInsert = [...updatedAppPaths, appId];
-      newOrder.splice(folderIndex, 0, ...appsToInsert);
-
-      // Remove folder from folders list
-      const updatedFolders = folders.filter((f) => f.id !== openFolder.id);
+      const { newOrder, updatedFolders } = dissolveFolder(
+        openFolder.id,
+        dragGrid.order,
+        folders,
+        [...updatedAppPaths, appId]
+      );
 
       setFolders(updatedFolders);
       dragGrid.setOrder(newOrder);
@@ -398,9 +383,7 @@ export function useGrid() {
       setOpenFolder(null);
     } else {
       // Folder still has apps, just remove this one
-      const updatedFolders = folders.map((f) =>
-        f.id === openFolder.id ? { ...f, appPaths: updatedAppPaths } : f
-      );
+      const updatedFolders = updateFolderById(folders, openFolder.id, { appPaths: updatedAppPaths });
 
       // Add app back to main grid (at end)
       const newOrder = [...dragGrid.order, appId];

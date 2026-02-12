@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { AppItem, type GridItem } from "@/components/items/AppItem";
+import { AppItem } from "@/components/items/AppItem";
 import { useDragGrid, type DragMoveInfo } from "@/hooks/useDragGrid";
 import { type GridFolder } from "@/components/items/FolderItem";
 import { cn } from "@/utils/cn";
+import { resolveOrderToAppItems } from "@/utils/folderUtils";
+import { useCloseAnimation } from "@/hooks/useCloseAnimation";
 import type { DragCoordinator } from "@/lib/helper-dnd";
 
 interface FolderModalProps {
@@ -31,11 +33,10 @@ export function FolderModal({
   const defaultOrder = folder.apps.map((app) => app.path);
   const initialOrder = savedOrder && savedOrder.length > 0 ? savedOrder : defaultOrder;
 
-  const [isClosing, setIsClosing] = useState(false);
+  const { isClosing, triggerClose } = useCloseAnimation();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(folder.name);
   const didFocusRef = useRef(false);
-  const isClosingRef = useRef(false);
   const onCloseRef = useRef(onClose);
   const handoffTriggeredRef = useRef(false);
 
@@ -96,9 +97,7 @@ export function FolderModal({
   }, [coordinator, getEngine, containerRef]);
 
   function handleClose() {
-    if (isClosingRef.current) return;
-    isClosingRef.current = true;
-    setIsClosing(true);
+    if (!triggerClose()) return;
     setTimeout(() => onCloseRef.current(), 200); // Match animation duration
   }
 
@@ -134,12 +133,7 @@ export function FolderModal({
 
   // Derive items from order + folder apps
   const appsMap = new Map(folder.apps.map((app) => [app.path, app]));
-  const items = (order ?? [])
-    .map((id) => {
-      const app = appsMap.get(id);
-      return app ? { ...app, id } : null;
-    })
-    .filter((item): item is GridItem => item !== null);
+  const items = resolveOrderToAppItems(order ?? [], appsMap);
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
 

@@ -10,6 +10,9 @@ export { GhostElement } from "./GhostElement";
 export { SlotDetection } from "./SlotDetection";
 export { GridTransforms } from "./GridTransforms";
 
+// Utilities
+export { isPointOutsideRect } from "./types";
+
 // Types
 export type {
   Point,
