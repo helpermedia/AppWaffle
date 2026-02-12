@@ -11,6 +11,7 @@ This project has custom skills for in-depth guidance:
 | `/react` | React 19 best practices, hooks, state management and data fetching |
 | `/tailwind` | Tailwind CSS v4 best practices, configuration and patterns |
 | `/rust` | Tauri v2 and Rust backend patterns, commands, state, IPC and security |
+| `/commit` | Run lint and build checks, then create a conventional commit |
 
 Use these skills for detailed code examples and comprehensive guidance.
 
@@ -75,28 +76,7 @@ For detailed patterns and code examples, use the `/react` skill.
 
 **NEVER auto-commit or push without explicit approval.**
 
-Before any commit, show:
-- Files to commit with status and change summary
-- Proposed commit message
-
-Commit message format:
-
-```
-type(scope): subject line (<72 chars)
-
-Context paragraph explaining WHY this change is needed, what was broken,
-or what motivated the change.
-
-- Bullet points describing WHAT changed
-- One bullet per logical change
-```
-
-- Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
-- Scope is optional (e.g., `au`, `vst3`, `xtask`, `core`, `examples`)
-- Subject: lowercase, imperative mood, no period
-- Body: blank line after subject, wrap at 72 chars
-- Context paragraph explains the problem or motivation
-- Bullet list covers the concrete changes
+For commit conventions and message format, use the `/commit` skill.
 
 ## Testing
 
