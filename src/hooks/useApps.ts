@@ -17,45 +17,66 @@ export function useApps(): UseAppsResult {
   const [folders, setFolders] = useState(initialData.folders);
   const iconsLoadedRef = useRef(false);
 
-  // Load icons progressively after initial render
+  // Load icons progressively after initial render, batching state updates
   useEffect(() => {
     if (iconsLoadedRef.current) return;
     iconsLoadedRef.current = true;
 
-    // Collect all apps that need icons
     const allApps = [
       ...initialData.apps,
       ...initialData.folders.flatMap((folder) => folder.apps),
     ];
     const appsWithoutIcons = allApps.filter((app) => !app.icon);
+    if (appsWithoutIcons.length === 0) return;
 
-    // Load missing icons progressively
+    // Accumulate loaded icons, flush in batches to reduce re-renders
+    const pendingIcons = new Map<string, string>();
+    let remaining = appsWithoutIcons.length;
+    let cancelled = false;
+
+    function flush() {
+      if (cancelled || pendingIcons.size === 0) return;
+      const batch = new Map(pendingIcons);
+      pendingIcons.clear();
+
+      setApps((prev) =>
+        prev.map((a) => {
+          const icon = batch.get(a.path);
+          return icon ? { ...a, icon } : a;
+        })
+      );
+      setFolders((prev) =>
+        prev.map((folder) => ({
+          ...folder,
+          apps: folder.apps.map((a) => {
+            const icon = batch.get(a.path);
+            return icon ? { ...a, icon } : a;
+          }),
+        }))
+      );
+    }
+
+    const interval = setInterval(flush, 100);
+
     for (const app of appsWithoutIcons) {
-      loadIcon(app.path);
+      invoke<string | null>("get_app_icon", { path: app.path })
+        .then((icon) => {
+          if (icon) pendingIcons.set(app.path, icon);
+        })
+        .catch((e) => console.error(`Failed to load icon for ${app.path}:`, e))
+        .finally(() => {
+          remaining--;
+          if (remaining === 0) {
+            clearInterval(interval);
+            flush();
+          }
+        });
     }
 
-    async function loadIcon(appPath: string) {
-      try {
-        const icon = await invoke<string | null>("get_app_icon", { path: appPath });
-        if (icon) {
-          // Update top-level apps
-          setApps((prev) =>
-            prev.map((a) => (a.path === appPath ? { ...a, icon } : a))
-          );
-          // Update apps in folders
-          setFolders((prev) =>
-            prev.map((folder) => ({
-              ...folder,
-              apps: folder.apps.map((a) =>
-                a.path === appPath ? { ...a, icon } : a
-              ),
-            }))
-          );
-        }
-      } catch (e) {
-        console.error(`Failed to load icon for ${appPath}:`, e);
-      }
-    }
+    return () => {
+      clearInterval(interval);
+      cancelled = true;
+    };
   }, [initialData]);
 
   return { apps, folders };

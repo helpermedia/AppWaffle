@@ -299,17 +299,17 @@ fn update_order(main: Vec<String>, folders: Vec<FolderMetadata>) -> Result<(), S
     }
 
     let order = OrderConfig { main, folders };
-    *ORDER_STATE.lock().unwrap() = Some(order);
+    *ORDER_STATE.lock().expect("ORDER_STATE mutex poisoned") = Some(order);
     Ok(())
 }
 
 /// Save in-memory order state to disk (called on window close)
 fn save_order_to_disk() -> Result<(), String> {
-    let _save_guard = SAVE_LOCK.lock().unwrap();
+    let _save_guard = SAVE_LOCK.lock().expect("SAVE_LOCK mutex poisoned");
 
     // Clone the order and release ORDER_STATE quickly to avoid blocking update_order
     let order = {
-        let state = ORDER_STATE.lock().unwrap();
+        let state = ORDER_STATE.lock().expect("ORDER_STATE mutex poisoned");
         match state.as_ref() {
             Some(order) => order.clone(),
             None => return Ok(()), // Nothing to save
@@ -327,7 +327,8 @@ fn save_order_to_disk() -> Result<(), String> {
         order,
     };
 
-    let config_path = get_config_path().unwrap();
+    let config_path = get_config_path()
+        .ok_or_else(|| "Could not determine config path".to_string())?;
     let json = serde_json::to_string_pretty(&config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
@@ -478,7 +479,8 @@ pub fn run() {
             let app_menu = Submenu::with_items(app, "AppWaffle", true, &[&about, &PredefinedMenuItem::separator(app)?, &quit])?;
             let menu = Menu::with_items(app, &[&app_menu])?;
             app.set_menu(menu)?;
-            let window = app.get_webview_window("main").unwrap();
+            let window = app.get_webview_window("main")
+                .expect("main webview window not found");
 
             #[cfg(target_os = "macos")]
             {
