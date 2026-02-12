@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useGrid } from "@/hooks/useGrid";
 import { useCloseAnimation } from "@/hooks/useCloseAnimation";
@@ -69,15 +69,11 @@ export function AppWaffle() {
     invoke("quit_after_delay", { delayMs: 900 });
   }
 
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && !openFolder) {
-        closeApp();
-      }
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape" && !openFolder) {
+      closeApp();
     }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [openFolder]);
+  }
 
   // Close on click outside (empty space)
   function handleBackgroundClick(e: React.MouseEvent) {
@@ -92,9 +88,11 @@ export function AppWaffle() {
   return (
     <div
       ref={scrollRef}
-      className={`w-full h-full p-20 overflow-auto transition-opacity duration-300 ${
+      tabIndex={-1}
+      className={`w-full h-full p-20 overflow-auto outline-none transition-opacity duration-300 ${
         isClosing ? "opacity-0" : "opacity-100"
       }`}
+      onKeyDown={handleKeyDown}
       onClick={handleBackgroundClick}
     >
       {openFolder && (

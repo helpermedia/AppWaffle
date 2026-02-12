@@ -137,17 +137,13 @@ export function FolderModal({
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
 
-  // Close on Escape (only when not editing)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isEditing && !isDragging) {
-        e.stopPropagation();
-        handleClose();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isEditing, isDragging]);
+  function handleKeyDown(e: React.KeyboardEvent) {
+    // Don't close if editing (input has its own Escape handler) or dragging
+    if (e.key === "Escape" && !isEditing && !isDragging) {
+      e.stopPropagation();
+      handleClose();
+    }
+  }
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     // Don't close if we're clicking inside the folder content or during drag
@@ -159,10 +155,12 @@ export function FolderModal({
 
   return (
     <div
+      tabIndex={-1}
       className={cn(
-        "h-full flex flex-col items-center justify-center",
+        "h-full flex flex-col items-center justify-center outline-none",
         isClosing ? "animate-fade-out" : "animate-fade-in"
       )}
+      onKeyDown={handleKeyDown}
       onClick={handleBackdropClick}
     >
       {isEditing ? (
