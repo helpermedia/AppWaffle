@@ -40,6 +40,13 @@ bun tauri build
 - **Backend**: Rust, Tauri
 - **Icons**: NSWorkspace API
 
+## Data
+
+AppWaffle stores its data in standard macOS directories:
+
+- **Config**: `~/Library/Application Support/com.helpermedia.appwaffle/config.json`
+- **Icon cache**: `~/Library/Caches/com.helpermedia.appwaffle/icons/`
+
 ## License
 
 MIT
