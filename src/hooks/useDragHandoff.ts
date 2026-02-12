@@ -49,6 +49,7 @@ export function useDragHandoff({
   const setFoldersRef = useRef(setFolders);
   const setOpenFolderRef = useRef(setOpenFolder);
 
+  // Sync refs and handoff handler every render (can't update refs during render)
   useEffect(() => {
     openFolderRef.current = openFolder;
     foldersRef.current = folders;
@@ -56,10 +57,7 @@ export function useDragHandoff({
     saveOrderRef.current = saveOrder;
     setFoldersRef.current = setFolders;
     setOpenFolderRef.current = setOpenFolder;
-  });
 
-  // Set up the actual handoff handler in an effect (can't update refs during render)
-  useEffect(() => {
     handoffHandlerRef.current = async (request: HandoffRequest) => {
       const currentOpenFolder = openFolderRef.current;
       const currentDragGrid = dragGridRef.current;
@@ -96,7 +94,7 @@ export function useDragHandoff({
       saveOrderRef.current(newOrder, updatedFolders);
       setOpenFolderRef.current(null);
     };
-  }); // No deps - uses refs which always have current values
+  });
 
   // Register main grid with coordinator when engine is available
   useEffect(() => {
