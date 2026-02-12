@@ -379,7 +379,8 @@ async fn get_apps() -> Result<AppsResponse, String> {
     let folders: Vec<FolderInfo> = folder_data
         .into_par_iter()
         .filter_map(|(folder_path, sub_app_paths)| {
-            let name = folder_path.file_name()?.to_string_lossy().to_string();
+            let raw_name = folder_path.file_name()?.to_string_lossy().to_string();
+            let name = raw_name.strip_suffix(".localized").unwrap_or(&raw_name).to_string();
             let path_str = folder_path.to_string_lossy().to_string();
 
             let folder_apps: Vec<AppInfo> = sub_app_paths
