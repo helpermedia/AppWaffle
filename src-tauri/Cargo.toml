@@ -22,6 +22,7 @@ window-vibrancy = "0.5"
 base64 = "0.22"
 dirs = "5"
 rayon = "1.10"
+thiserror = "2"
 raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "macos")'.dependencies]

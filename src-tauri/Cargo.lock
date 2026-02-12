@@ -64,6 +64,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-opener",
  "tauri-plugin-process",
+ "thiserror 2.0.17",
  "window-vibrancy 0.5.3",
 ]
 
