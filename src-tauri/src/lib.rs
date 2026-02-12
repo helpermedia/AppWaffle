@@ -451,13 +451,18 @@ async fn show_window(window: tauri::WebviewWindow) -> Result<(), String> {
 /// Flag to prevent focus-loss close during app launch animation
 static IS_LAUNCHING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Save order state to disk and exit
+fn graceful_exit(app: &tauri::AppHandle) {
+    if let Err(e) = save_order_to_disk() {
+        eprintln!("Failed to save order: {}", e);
+    }
+    app.exit(0);
+}
+
 /// Quit the app, saving order state first
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
-    if let Err(e) = save_order_to_disk() {
-        eprintln!("Failed to save order on quit: {}", e);
-    }
-    app.exit(0);
+    graceful_exit(&app);
 }
 
 /// Quit the app after a delay (used for launch animation)
@@ -468,10 +473,7 @@ fn quit_after_delay(app: tauri::AppHandle, delay_ms: u64) {
 
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-        if let Err(e) = save_order_to_disk() {
-            eprintln!("Failed to save order on delayed quit: {}", e);
-        }
-        app.exit(0);
+        graceful_exit(&app);
     });
 }
 
@@ -527,11 +529,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![get_apps, get_app_icon, launch_app, show_window, load_config, update_order, quit_app, quit_after_delay])
         .on_menu_event(|app, event| {
             if event.id() == "quit" {
-                // Save order state before quitting
-                if let Err(e) = save_order_to_disk() {
-                    eprintln!("Failed to save order on quit: {}", e);
-                }
-                app.exit(0);
+                graceful_exit(app);
             }
         })
         .on_window_event(|window, event| {
@@ -547,17 +545,11 @@ pub fn run() {
                     let app = window.app_handle().clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(std::time::Duration::from_millis(300));
-                        if let Err(e) = save_order_to_disk() {
-                            eprintln!("Failed to save order on focus loss: {}", e);
-                        }
-                        app.exit(0);
+                        graceful_exit(&app);
                     });
                 }
                 WindowEvent::CloseRequested { .. } => {
-                    // Save order state before window closes
-                    if let Err(e) = save_order_to_disk() {
-                        eprintln!("Failed to save order on close: {}", e);
-                    }
+                    graceful_exit(window.app_handle());
                 }
                 _ => {}
             }

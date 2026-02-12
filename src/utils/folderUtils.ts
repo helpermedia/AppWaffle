@@ -70,6 +70,34 @@ export function dissolveFolder(
 }
 
 /**
+ * Remove an app from a folder and compute the resulting order/folders.
+ * If the folder has 0-1 apps remaining, it is dissolved (apps return to the grid).
+ * Otherwise the folder is updated and the removed app is appended to the grid.
+ */
+export function removeAppFromFolder(
+  folderId: string,
+  appId: string,
+  order: string[],
+  folders: FolderMetadata[],
+): { newOrder: string[]; updatedFolders: FolderMetadata[]; dissolved: boolean } {
+  const folder = folders.find((f) => f.id === folderId);
+  if (!folder) return { newOrder: order, updatedFolders: folders, dissolved: false };
+
+  const remainingApps = folder.appPaths.filter((id) => id !== appId);
+
+  if (remainingApps.length <= 1) {
+    const { newOrder, updatedFolders } = dissolveFolder(
+      folderId, order, folders, [...remainingApps, appId],
+    );
+    return { newOrder, updatedFolders, dissolved: true };
+  }
+
+  const updatedFolders = updateFolderById(folders, folderId, { appPaths: remainingApps });
+  const newOrder = [...order, appId];
+  return { newOrder, updatedFolders, dissolved: false };
+}
+
+/**
  * Return a new folders array with one folder updated by id.
  */
 export function updateFolderById(

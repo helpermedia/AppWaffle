@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DragEngine, isPointOutsideRect } from "@/lib/helper-dnd";
 import type { GridItem, DragState, Rect, Point, DropAnimationTarget } from "@/lib/helper-dnd";
+import { useLatestRef } from "@/hooks/useLatestRef";
 
 /** Overlap information for folder creation */
 export interface OverlapInfo {
@@ -159,6 +160,21 @@ function findHighestOverlap(
 }
 
 /**
+ * Calculate the current rect of the active (dragged) item based on pointer movement.
+ */
+function getActiveRect(state: DragState): Rect {
+  const dx = state.currentPointer.x - state.startPointer.x;
+  const dy = state.currentPointer.y - state.startPointer.y;
+  return {
+    left: state.activeItem.rect.left + dx,
+    top: state.activeItem.rect.top + dy,
+    width: state.activeItem.rect.width,
+    height: state.activeItem.rect.height,
+    center: state.activeCenter,
+  };
+}
+
+/**
  * Reorder an array by moving an item from one index to another.
  */
 function arrayMove<T>(array: T[], fromIndex: number, toIndex: number): T[] {
@@ -186,24 +202,13 @@ export function useDragGrid({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   // Keep refs for callbacks to avoid stale closures
-  const orderRef = useRef(order);
-  const onOrderChangeRef = useRef(onOrderChange);
-  const onDragMoveRef = useRef(onDragMove);
-  const onDragEndRef = useRef(onDragEnd);
-  const getDropAnimationTargetRef = useRef(getDropAnimationTarget);
-  const onDragOutsideRef = useRef(onDragOutside);
-  const onDragExitRef = useRef(onDragExit);
-
-  // Update refs in effect to avoid updating during render
-  useEffect(() => {
-    orderRef.current = order;
-    onOrderChangeRef.current = onOrderChange;
-    onDragMoveRef.current = onDragMove;
-    onDragEndRef.current = onDragEnd;
-    getDropAnimationTargetRef.current = getDropAnimationTarget;
-    onDragOutsideRef.current = onDragOutside;
-    onDragExitRef.current = onDragExit;
-  });
+  const orderRef = useLatestRef(order);
+  const onOrderChangeRef = useLatestRef(onOrderChange);
+  const onDragMoveRef = useLatestRef(onDragMove);
+  const onDragEndRef = useLatestRef(onDragEnd);
+  const getDropAnimationTargetRef = useLatestRef(getDropAnimationTarget);
+  const onDragOutsideRef = useLatestRef(onDragOutside);
+  const onDragExitRef = useLatestRef(onDragExit);
 
   // Initialize engine
   useEffect(() => {
@@ -224,16 +229,7 @@ export function useDragGrid({
 
       const items = engine.getItems();
 
-      // Calculate current rect of active item
-      const dx = state.currentPointer.x - state.startPointer.x;
-      const dy = state.currentPointer.y - state.startPointer.y;
-      const activeRect: Rect = {
-        left: state.activeItem.rect.left + dx,
-        top: state.activeItem.rect.top + dy,
-        width: state.activeItem.rect.width,
-        height: state.activeItem.rect.height,
-        center: state.activeCenter,
-      };
+      const activeRect = getActiveRect(state);
 
       // Find overlap (skip shifted items - their cached positions are invalid)
       const overlap = findHighestOverlap(activeRect, items, state.activeItem.index, state.targetIndex);
@@ -280,16 +276,7 @@ export function useDragGrid({
 
       const items = engine.getItems();
 
-      // Calculate current rect of active item based on pointer movement
-      const dx = state.currentPointer.x - state.startPointer.x;
-      const dy = state.currentPointer.y - state.startPointer.y;
-      const activeRect: Rect = {
-        left: state.activeItem.rect.left + dx,
-        top: state.activeItem.rect.top + dy,
-        width: state.activeItem.rect.width,
-        height: state.activeItem.rect.height,
-        center: state.activeCenter,
-      };
+      const activeRect = getActiveRect(state);
 
       // Find overlap for folder creation (skip shifted items)
       const overlap = findHighestOverlap(activeRect, items, state.activeItem.index, state.targetIndex);
@@ -343,15 +330,7 @@ export function useDragGrid({
       let overlapRatio = 0;
 
       if (state) {
-        const dx = state.currentPointer.x - state.startPointer.x;
-        const dy = state.currentPointer.y - state.startPointer.y;
-        const activeRect: Rect = {
-          left: state.activeItem.rect.left + dx,
-          top: state.activeItem.rect.top + dy,
-          width: state.activeItem.rect.width,
-          height: state.activeItem.rect.height,
-          center: state.activeCenter,
-        };
+        const activeRect = getActiveRect(state);
         const overlap = findHighestOverlap(activeRect, items, fromIndex, toIndex);
         if (overlap) {
           overId = overlap.targetId;
@@ -411,7 +390,7 @@ export function useDragGrid({
       engine.destroy();
       engineRef.current = null;
     };
-  }, []); // Only run on mount
+  }, [orderRef, onOrderChangeRef, onDragMoveRef, onDragEndRef, getDropAnimationTargetRef, onDragOutsideRef, onDragExitRef]);
 
   // Track previous dragging state to detect when drag ends
   const wasDraggingRef = useRef(false);

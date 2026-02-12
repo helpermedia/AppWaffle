@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { DragCoordinator } from "@/lib/helper-dnd";
 import type { HandoffRequest } from "@/lib/helper-dnd";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import type { FolderMetadata } from "@/types/app";
 import type { GridFolder } from "@/components/items/FolderItem";
-import { dissolveFolder, updateFolderById } from "@/utils/folderUtils";
+import { removeAppFromFolder } from "@/utils/folderUtils";
 import type { DragEngine } from "@/lib/helper-dnd";
 
 interface DragGridHandle {
@@ -42,22 +43,15 @@ export function useDragHandoff({
   }, [coordinator]);
 
   // Refs for handoff callback to access current state
-  const openFolderRef = useRef(openFolder);
-  const foldersRef = useRef(folders);
-  const dragGridRef = useRef(dragGrid);
-  const saveOrderRef = useRef(saveOrder);
-  const setFoldersRef = useRef(setFolders);
-  const setOpenFolderRef = useRef(setOpenFolder);
+  const openFolderRef = useLatestRef(openFolder);
+  const foldersRef = useLatestRef(folders);
+  const dragGridRef = useLatestRef(dragGrid);
+  const saveOrderRef = useLatestRef(saveOrder);
+  const setFoldersRef = useLatestRef(setFolders);
+  const setOpenFolderRef = useLatestRef(setOpenFolder);
 
-  // Sync refs and handoff handler every render (can't update refs during render)
+  // Update handoff handler every render
   useEffect(() => {
-    openFolderRef.current = openFolder;
-    foldersRef.current = folders;
-    dragGridRef.current = dragGrid;
-    saveOrderRef.current = saveOrder;
-    setFoldersRef.current = setFolders;
-    setOpenFolderRef.current = setOpenFolder;
-
     handoffHandlerRef.current = async (request: HandoffRequest) => {
       const currentOpenFolder = openFolderRef.current;
       const currentDragGrid = dragGridRef.current;
@@ -65,30 +59,15 @@ export function useDragHandoff({
 
       if (!currentOpenFolder || !currentDragGrid.order) return;
 
-      const folder = currentFolders.find((f) => f.id === currentOpenFolder.id);
-      if (!folder) return;
+      if (!currentFolders.some((f) => f.id === currentOpenFolder.id)) return;
 
-      // Remove app from folder
-      const updatedAppPaths = folder.appPaths.filter((id) => id !== request.itemId);
+      const { newOrder, updatedFolders } = removeAppFromFolder(
+        currentOpenFolder.id,
+        request.itemId,
+        currentDragGrid.order,
+        currentFolders,
+      );
 
-      let newOrder: string[];
-      let updatedFolders: typeof currentFolders;
-
-      if (updatedAppPaths.length <= 1) {
-        // Folder becomes empty or has only 1 app - dissolve folder
-        ({ newOrder, updatedFolders } = dissolveFolder(
-          currentOpenFolder.id,
-          currentDragGrid.order,
-          currentFolders,
-          [...updatedAppPaths, request.itemId]
-        ));
-      } else {
-        // Folder still has apps - add dragged app to end of main grid
-        newOrder = [...currentDragGrid.order, request.itemId];
-        updatedFolders = updateFolderById(currentFolders, currentOpenFolder.id, { appPaths: updatedAppPaths });
-      }
-
-      // Update state synchronously
       setFoldersRef.current(updatedFolders);
       currentDragGrid.setOrder(newOrder);
       saveOrderRef.current(newOrder, updatedFolders);

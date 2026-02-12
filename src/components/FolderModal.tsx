@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { AppItem } from "@/components/items/AppItem";
 import { useDragGrid, type DragMoveInfo } from "@/hooks/useDragGrid";
 import { type GridFolder } from "@/components/items/FolderItem";
 import { cn } from "@/utils/cn";
+import { buildAppsMap } from "@/utils/appUtils";
 import { resolveOrderToAppItems } from "@/utils/folderUtils";
 import { useCloseAnimation } from "@/hooks/useCloseAnimation";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import type { DragCoordinator } from "@/lib/helper-dnd";
 
 interface FolderModalProps {
@@ -37,12 +39,8 @@ export function FolderModal({
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(folder.name);
   const didFocusRef = useRef(false);
-  const onCloseRef = useRef(onClose);
+  const onCloseRef = useLatestRef(onClose);
   const handoffTriggeredRef = useRef(false);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  });
 
   // Handle drag move - check for handoff to main grid
   const handleDragMove = (info: DragMoveInfo) => {
@@ -132,7 +130,7 @@ export function FolderModal({
   }
 
   // Derive items from order + folder apps
-  const appsMap = new Map(folder.apps.map((app) => [app.path, app]));
+  const appsMap = buildAppsMap(folder.apps);
   const items = resolveOrderToAppItems(order ?? [], appsMap);
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;

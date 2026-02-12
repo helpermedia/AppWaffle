@@ -1,4 +1,5 @@
 import type { AppInfo, FolderInfo, FolderMetadata, OrderConfig } from "@/types/app";
+import { buildAppsMap } from "@/utils/appUtils";
 import { isFolderId, resolveFolderApps, resolveOrderToAppItems, convertPhysicalFolders } from "@/utils/folderUtils";
 import type { GridItem } from "@/components/items/AppItem";
 import type { GridFolder } from "@/components/items/FolderItem";
@@ -30,9 +31,9 @@ export function useGridData({
 }: UseGridDataOptions) {
   // Create apps map for resolving folder apps
   // Include both top-level apps AND apps from physical folders (for initial conversion)
-  const appsMap = new Map([
-    ...apps.map((app) => [app.path, app] as const),
-    ...physicalFolders.flatMap((folder) => folder.apps.map((app) => [app.path, app] as const)),
+  const appsMap = buildAppsMap([
+    ...apps,
+    ...physicalFolders.flatMap((folder) => folder.apps),
   ]);
 
   // Get item type for folder creation hook

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AppInfo, FolderMetadata } from "@/types/app";
-import { resolveFolderApps, dissolveFolder, updateFolderById } from "@/utils/folderUtils";
+import { resolveFolderApps, removeAppFromFolder, updateFolderById } from "@/utils/folderUtils";
 import type { GridFolder } from "@/components/items/FolderItem";
 
 interface UseFolderOperationsOptions {
@@ -105,40 +105,22 @@ export function useFolderOperations({
 
   function handleRemoveFromFolder(appId: string) {
     if (!openFolder || !order) return;
+    if (!folders.some((f) => f.id === openFolder.id)) return;
 
-    const folder = folders.find((f) => f.id === openFolder.id);
-    if (!folder) return;
+    const { newOrder, updatedFolders, dissolved } = removeAppFromFolder(
+      openFolder.id, appId, order, folders,
+    );
 
-    // Remove app from folder
-    const updatedAppPaths = folder.appPaths.filter((id) => id !== appId);
+    setFolders(updatedFolders);
+    setOrder(newOrder);
+    saveOrder(newOrder, updatedFolders);
 
-    // If folder would be empty or have only 1 app, dissolve it
-    if (updatedAppPaths.length <= 1) {
-      const { newOrder, updatedFolders } = dissolveFolder(
-        openFolder.id,
-        order,
-        folders,
-        [...updatedAppPaths, appId]
-      );
-
-      setFolders(updatedFolders);
-      setOrder(newOrder);
-      saveOrder(newOrder, updatedFolders);
+    if (dissolved) {
       setOpenFolder(null);
     } else {
-      // Folder still has apps, just remove this one
-      const updatedFolders = updateFolderById(folders, openFolder.id, { appPaths: updatedAppPaths });
-
-      // Add app back to main grid (at end)
-      const newOrder = [...order, appId];
-
-      // Update open folder view
-      const resolvedApps = resolveFolderApps(updatedAppPaths, appsMap);
+      const folder = updatedFolders.find((f) => f.id === openFolder.id);
+      const resolvedApps = folder ? resolveFolderApps(folder.appPaths, appsMap) : [];
       setOpenFolder({ ...openFolder, apps: resolvedApps });
-
-      setFolders(updatedFolders);
-      setOrder(newOrder);
-      saveOrder(newOrder, updatedFolders);
     }
   }
 
