@@ -1,6 +1,6 @@
 import type { AppInfo, FolderInfo, FolderMetadata, OrderConfig } from "@/types/app";
 import { buildAppsMap } from "@/utils/appUtils";
-import { isFolderId, resolveFolderApps, resolveOrderToAppItems, convertPhysicalFolders } from "@/utils/folderUtils";
+import { isFolderId, resolveFolderApps, resolveOrderToAppItems, convertPhysicalFolders, buildInitialOrder } from "@/utils/folderUtils";
 import type { GridItem } from "@/components/items/AppItem";
 import type { GridFolder } from "@/components/items/FolderItem";
 
@@ -84,23 +84,15 @@ export function useGridData({
       setFolders(effectiveFolders);
     }
 
-    const allIds = new Set([
-      ...apps.map((a) => a.path),
-      ...effectiveFolders.map((f) => f.id),
-    ]);
-
-    if (orderConfig?.main && orderConfig.main.length > 0) {
-      // Use saved order, filter out removed items, append new items
-      const validSavedOrder = orderConfig.main.filter((id) => allIds.has(id));
-      const newItems = [...allIds].filter((id) => !orderConfig.main.includes(id));
-      setOrder([...validSavedOrder, ...newItems]);
-    } else {
-      // First launch - use default order
-      setOrder([
-        ...apps.map((app) => app.path),
-        ...effectiveFolders.map((f) => f.id),
-      ]);
-    }
+    // Build order from saved config (healing stale/duplicate/folder-contained
+    // entries) or from scratch on first launch — same reconciliation either way
+    setOrder(
+      buildInitialOrder(
+        orderConfig?.main ?? [],
+        apps.map((a) => a.path),
+        effectiveFolders
+      )
+    );
   }
 
   // Build items from current order

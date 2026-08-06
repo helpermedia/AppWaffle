@@ -52,6 +52,33 @@ export function resolveOrderToAppItems(
 }
 
 /**
+ * Build the initial main-grid order from a saved order and discovered items.
+ * Drops ids that no longer exist, apps that live inside folders, and
+ * duplicates (healing configs corrupted by earlier versions), then appends
+ * newly discovered items at the end.
+ */
+export function buildInitialOrder(
+  savedMain: string[],
+  appPaths: string[],
+  folders: FolderMetadata[]
+): string[] {
+  const folderContained = new Set(folders.flatMap((f) => f.appPaths));
+  const allIds = new Set([
+    ...appPaths.filter((path) => !folderContained.has(path)),
+    ...folders.map((f) => f.id),
+  ]);
+
+  const seen = new Set<string>();
+  const validSavedOrder = savedMain.filter((id) => {
+    if (!allIds.has(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  const newItems = [...allIds].filter((id) => !seen.has(id));
+  return [...validSavedOrder, ...newItems];
+}
+
+/**
  * Dissolve a folder back into individual apps in the main grid order.
  * Replaces the folder entry with the given apps at the folder's position.
  */
@@ -61,10 +88,14 @@ export function dissolveFolder(
   currentFolders: FolderMetadata[],
   appsToInsert: string[]
 ): { newOrder: string[]; updatedFolders: FolderMetadata[] } {
-  const newOrder = [...order];
+  // Drop any stray copies of the inserted apps so they can't end up twice
+  const newOrder = order.filter((id) => !appsToInsert.includes(id));
   const folderIndex = newOrder.indexOf(folderId);
-  newOrder.splice(folderIndex, 1);
-  newOrder.splice(folderIndex, 0, ...appsToInsert);
+  if (folderIndex === -1) {
+    newOrder.push(...appsToInsert);
+  } else {
+    newOrder.splice(folderIndex, 1, ...appsToInsert);
+  }
   const updatedFolders = currentFolders.filter((f) => f.id !== folderId);
   return { newOrder, updatedFolders };
 }
@@ -93,7 +124,8 @@ export function removeAppFromFolder(
   }
 
   const updatedFolders = updateFolderById(folders, folderId, { appPaths: remainingApps });
-  const newOrder = [...order, appId];
+  // Filter first: the app must never appear twice in the grid order
+  const newOrder = [...order.filter((id) => id !== appId), appId];
   return { newOrder, updatedFolders, dissolved: false };
 }
 
