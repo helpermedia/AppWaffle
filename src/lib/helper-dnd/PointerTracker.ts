@@ -120,9 +120,32 @@ export class PointerTracker {
 
   private handlePointerUp(e: PointerEvent): void {
     if (this.isDragging) {
+      // The browser synthesizes a click right after this pointerup. It must
+      // never reach the app: depending on drop-animation timing it can hit
+      // click handlers (background close, item launch) after drag state has
+      // already been cleared.
+      PointerTracker.suppressNextClick();
       this.onDragEnd?.({ x: e.clientX, y: e.clientY });
     }
     this.cleanup();
+  }
+
+  /** Swallow the single click event the browser synthesizes after a drag. */
+  private static suppressNextClick(): void {
+    const swallow = (e: MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      remove();
+    };
+    const remove = () => {
+      document.removeEventListener("click", swallow, true);
+      clearTimeout(timerId);
+    };
+    document.addEventListener("click", swallow, true);
+    // Safety net: if no click follows this pointerup, don't swallow a later
+    // unrelated click. The synthesized click fires within the same input
+    // sequence, so 50ms is more than enough.
+    const timerId = setTimeout(remove, 50);
   }
 
   private handlePointerCancel(): void {
