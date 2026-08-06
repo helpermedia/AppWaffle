@@ -11,6 +11,11 @@ export function getAppsPromise(): Promise<AppsResponse> {
       await invoke("show_window");
       return response;
     });
+    // Never cache a failure: the error boundary's "Try again" re-renders,
+    // which calls this again and must get a fresh attempt
+    appsPromise.catch(() => {
+      appsPromise = null;
+    });
   }
   return appsPromise;
 }

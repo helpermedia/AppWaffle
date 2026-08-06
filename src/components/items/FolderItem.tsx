@@ -44,8 +44,8 @@ export function FolderItem({
   onOpen: (folder: GridFolder) => void;
 }) {
   const handleClick = () => {
-    // Only open if not being dragged
-    if (!isDragging) {
+    // Only open if no drag is in progress (same guard as AppItem)
+    if (!isDragActive) {
       onOpen(item);
     }
   };
@@ -66,15 +66,6 @@ export function FolderItem({
         <DropTarget action={dropAction ?? null} />
         <FolderPreview apps={item.apps} />
       </div>
-      <Label>{item.name}</Label>
-    </Container>
-  );
-}
-
-export function FolderItemOverlay({ item }: { item: GridFolder }) {
-  return (
-    <Container>
-      <FolderPreview apps={item.apps} />
       <Label>{item.name}</Label>
     </Container>
   );

@@ -79,8 +79,9 @@ export function useGridData({
       ? savedFolders
       : convertPhysicalFolders(physicalFolders);
 
-    // If we converted physical folders, save them
-    if (savedFolders.length === 0 && effectiveFolders.length > 0) {
+    // Seed local folder state — from here on it is the single source of
+    // truth (mutations append/update it, so it must start complete)
+    if (effectiveFolders.length > 0) {
       setFolders(effectiveFolders);
     }
 

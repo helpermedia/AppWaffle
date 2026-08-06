@@ -69,23 +69,25 @@ export function useDragHandoff({
   }, [coordinator, openFolderRef, foldersRef, dragGridRef, saveOrderRef, setFoldersRef, setOpenFolderRef]);
   /* eslint-enable react-hooks/immutability */
 
-  // Register main grid with coordinator when engine is available
+  // Register main grid with coordinator once its engine exists (it does by
+  // the time this runs: useDragGrid's effect is registered first). Read via
+  // the ref so this effect doesn't re-run on every render — unregistering
+  // the active grid mid-drag would clear the coordinator's active state.
   useEffect(() => {
-    const engine = dragGrid.getEngine();
-    const container = dragGrid.containerRef.current;
-
-    if (coordinator && engine && container) {
-      coordinator.register({
-        id: "main-grid",
-        engine,
-        container,
-      });
+    const engine = dragGridRef.current.getEngine();
+    const container = dragGridRef.current.containerRef.current;
+    if (!engine || !container) {
+      // This effect runs once and never retries: if the engine isn't ready
+      // here (e.g., its creation effect gained deps), handoff is dead.
+      console.warn("useDragHandoff: main grid engine not ready, handoff disabled");
+      return;
     }
 
+    coordinator.register({ id: "main-grid", engine, container });
     return () => {
-      coordinator?.unregister("main-grid");
+      coordinator.unregister("main-grid");
     };
-  }, [coordinator, dragGrid]);
+  }, [coordinator, dragGridRef]);
 
   return { coordinator };
 }

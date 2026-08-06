@@ -5,6 +5,7 @@ import { useFolderCreation } from "@/hooks/useFolderCreation";
 import { useConfig, useDndSettings } from "@/hooks/useConfig";
 import { useGridData } from "@/hooks/useGridData";
 import { useFolderOperations } from "@/hooks/useFolderOperations";
+import { resolveFolderApps } from "@/utils/folderUtils";
 import { useDragHandoff } from "@/hooks/useDragHandoff";
 import type { DragMoveInfo, DragEndInfo, DropAnimationInfo } from "@/hooks/useDragGrid";
 
@@ -14,17 +15,11 @@ export function useGrid() {
   const { apps, folders: physicalFolders } = useApps();
   const { orderConfig, saveOrder } = useConfig();
 
-  // Folders management - all folders are now unified
-  const {
-    folders: localFolders,
-    setFolders,
-    createNewFolder,
-  } = useFolders([]);
-
-  // Use orderConfig as source of truth until local changes happen
-  const folders = localFolders.length > 0
-    ? localFolders
-    : (orderConfig?.folders ?? []);
+  // Folders management — seeded from config by useGridData's init pass,
+  // then local state is the single source of truth. (A derived fallback to
+  // orderConfig here previously caused data loss: creating the first folder
+  // of a session flipped the list to just that folder.)
+  const { folders, setFolders, createNewFolder } = useFolders([]);
 
   // Get DnD settings for animation control
   const { overlapThreshold } = useDndSettings();
@@ -88,9 +83,25 @@ export function useGrid() {
     onAddToFolder: folderOps.handleAddToFolder,
   });
 
+  // Live view of the open folder: openFolder state is a point-in-time
+  // snapshot, so late-loading icons and content changes would never show.
+  // Re-resolve from folders + appsMap each render; fall back to the
+  // snapshot briefly while a folder is dissolving.
+  const openFolderSnapshot = folderOps.openFolder;
+  const openFolderMeta = openFolderSnapshot
+    ? folders.find((f) => f.id === openFolderSnapshot.id)
+    : undefined;
+  const openFolder = openFolderMeta
+    ? {
+        id: openFolderMeta.id,
+        name: openFolderMeta.name,
+        apps: resolveFolderApps(openFolderMeta.appPaths, gridData.appsMap),
+      }
+    : openFolderSnapshot;
+
   // Coordinator for drag handoff between folder and main grid
   const { coordinator } = useDragHandoff({
-    openFolder: folderOps.openFolder,
+    openFolder,
     setOpenFolder: folderOps.setOpenFolder,
     folders,
     setFolders,
@@ -103,7 +114,7 @@ export function useGrid() {
     items: gridData.items,
     itemIds: gridData.itemIds,
     activeItem: gridData.activeItem,
-    openFolder: folderOps.openFolder,
+    openFolder,
 
     // DnD
     containerRef: dragGrid.containerRef,
