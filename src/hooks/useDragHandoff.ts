@@ -43,8 +43,8 @@ export function useDragHandoff({
 
   // Wire up the coordinator's onHandoff (once on mount).
   // All values accessed via stable refs — no need to recreate on every render.
+  /* eslint-disable react-hooks/immutability -- Coordinator is mutable by design */
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability -- Coordinator is mutable by design
     coordinator.onHandoff = async (request: HandoffRequest) => {
       const currentOpenFolder = openFolderRef.current;
       const currentDragGrid = dragGridRef.current;
@@ -67,6 +67,7 @@ export function useDragHandoff({
       setOpenFolderRef.current(null);
     };
   }, [coordinator, openFolderRef, foldersRef, dragGridRef, saveOrderRef, setFoldersRef, setOpenFolderRef]);
+  /* eslint-enable react-hooks/immutability */
 
   // Register main grid with coordinator when engine is available
   useEffect(() => {
