@@ -59,6 +59,8 @@ interface UseDragGridOptions {
   initialOrder: string[] | null;
   /** Called when order changes (reorder completed) */
   onOrderChange?: (newOrder: string[]) => void;
+  /** Called when a drag gesture activates, before its first move */
+  onDragStart?: () => void;
   /** Called on every drag move (for folder creation detection) */
   onDragMove?: (info: DragMoveInfo) => void;
   /** Called when drag ends (for folder creation detection). Must call `complete()` to show original item. */
@@ -208,6 +210,7 @@ function arrayMove<T>(array: T[], fromIndex: number, toIndex: number): T[] {
 export function useDragGrid({
   initialOrder,
   onOrderChange,
+  onDragStart,
   onDragMove,
   onDragEnd,
   onDragCancel,
@@ -229,6 +232,7 @@ export function useDragGrid({
   // Keep refs for callbacks to avoid stale closures
   const orderRef = useLatestRef(order);
   const onOrderChangeRef = useLatestRef(onOrderChange);
+  const onDragStartRef = useLatestRef(onDragStart);
   const onDragMoveRef = useLatestRef(onDragMove);
   const onDragEndRef = useLatestRef(onDragEnd);
   const onDragCancelRef = useLatestRef(onDragCancel);
@@ -247,6 +251,7 @@ export function useDragGrid({
       setIsDragging(true);
       setActiveId(item.id);
       setActiveIndex(item.index);
+      onDragStartRef.current?.();
     });
 
     // Callback to determine drop animation target
@@ -418,7 +423,7 @@ export function useDragGrid({
       engine.destroy();
       engineRef.current = null;
     };
-  }, [orderRef, onOrderChangeRef, onDragMoveRef, onDragEndRef, onDragCancelRef, getDropAnimationTargetRef, onDragOutsideRef, onDragExitRef]);
+  }, [orderRef, onOrderChangeRef, onDragStartRef, onDragMoveRef, onDragEndRef, onDragCancelRef, getDropAnimationTargetRef, onDragOutsideRef, onDragExitRef]);
 
   // Track previous dragging state to detect when drag ends
   const wasDraggingRef = useRef(false);

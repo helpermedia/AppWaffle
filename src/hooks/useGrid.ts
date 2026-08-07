@@ -7,6 +7,7 @@ import { useGridData } from "@/hooks/useGridData";
 import { useFolderOperations } from "@/hooks/useFolderOperations";
 import { resolveFolderApps } from "@/utils/folderUtils";
 import { useDragHandoff } from "@/hooks/useDragHandoff";
+import { useDockDrag } from "@/hooks/useDockDrag";
 import type { DragMoveInfo, DragEndInfo, DropAnimationInfo } from "@/hooks/useDragGrid";
 
 export type { GridItemUnion } from "@/hooks/useGridData";
@@ -30,13 +31,23 @@ export function useGrid() {
     onOrderChange(newOrder: string[]) {
       saveOrder(newOrder, folders);
     },
+    onDragStart() {
+      // A silent teardown path (no end/cancel event) must not leave the
+      // previous gesture's handoff state pinned to this item
+      dockDrag.reset();
+    },
     onDragMove(info: DragMoveInfo) {
+      // Dock handoff first: once the pointer is in the Dock zone the
+      // gesture goes native and folder-creation logic must stand down
+      if (dockDrag.handleDragMove(info)) return;
       handleFolderDragMove(info);
     },
     onDragEnd(info: DragEndInfo, reorder: () => void, complete: () => void) {
+      dockDrag.reset();
       handleFolderDragEnd(info, reorder, complete);
     },
     onDragCancel() {
+      dockDrag.reset();
       handleFolderDragCancel();
     },
     getDropAnimationTarget(info: DropAnimationInfo) {
@@ -62,6 +73,12 @@ export function useGrid() {
     setOrder: dragGrid.setOrder,
     setFolders,
     activeId: dragGrid.activeId,
+  });
+
+  // Launchpad-style drag-to-Dock pinning
+  const dockDrag = useDockDrag({
+    getEngine: dragGrid.getEngine,
+    isPinnable: (id) => gridData.getItemType(id) === "app",
   });
 
   // Folder CRUD & open/close state

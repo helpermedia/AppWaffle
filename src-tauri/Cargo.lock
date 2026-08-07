@@ -52,6 +52,8 @@ name = "appwaffle"
 version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
+ "core-foundation",
+ "core-graphics",
  "dirs",
  "objc2",
  "objc2-app-kit",

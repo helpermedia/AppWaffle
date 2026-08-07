@@ -1,6 +1,7 @@
 mod app_discovery;
 mod commands;
 mod config;
+mod dock_drag;
 mod icon_cache;
 mod window;
 
@@ -28,6 +29,13 @@ impl Serialize for AppError {
 
 /// Flag to prevent focus-loss close during app launch animation
 pub(crate) static IS_LAUNCHING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Flag to prevent focus-loss close while a native Dock drag session owns
+/// the mouse. Separate from IS_LAUNCHING: that one doubles as "a quit is
+/// already scheduled", and a drag must not swallow that meaning.
+/// dock_drag re-checks focus when the session ends.
+pub(crate) static IS_DOCK_DRAGGING: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
 /// Save order state to disk and exit
@@ -87,6 +95,8 @@ pub fn run() {
             commands::update_order,
             commands::quit_app,
             commands::quit_after_delay,
+            dock_drag::get_dock_drag_zone,
+            dock_drag::start_dock_drag,
         ])
         .on_menu_event(|app, event| {
             if event.id() == "quit" {
@@ -96,7 +106,10 @@ pub fn run() {
         .on_window_event(|window, event| match event {
             WindowEvent::Focused(false) => {
                 // Skip focus-loss close during app launch/close animation
-                if IS_LAUNCHING.load(std::sync::atomic::Ordering::SeqCst) {
+                // or while a Dock drag session is in flight
+                if IS_LAUNCHING.load(std::sync::atomic::Ordering::SeqCst)
+                    || IS_DOCK_DRAGGING.load(std::sync::atomic::Ordering::SeqCst)
+                {
                     return;
                 }
                 // Close when losing focus (like real Launchpad)

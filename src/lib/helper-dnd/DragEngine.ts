@@ -227,6 +227,20 @@ export class DragEngine {
     this.events.onDragCancel?.();
   }
 
+  /**
+   * Cancel because the gesture was handed off to a native drag session
+   * (e.g. dragging an app onto the macOS Dock). Emits onDragCancel like
+   * cancelDrag(), but skips click suppression: once the native session owns
+   * the mouse, the webview never sees the pointer release, so an armed
+   * suppressor would swallow the user's next real click instead.
+   */
+  cancelForHandoff(): void {
+    if (!this.state || !this.pointerTracker.isActivelyDragging()) return;
+
+    this.cancel();
+    this.events.onDragCancel?.();
+  }
+
   private setupPointerCallbacks(): void {
     this.pointerTracker.onDragStart = this.handleDragStart.bind(this);
     this.pointerTracker.onDragMove = this.handleDragMove.bind(this);

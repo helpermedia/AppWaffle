@@ -26,7 +26,9 @@ thiserror = "2"
 raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+core-graphics = "0.25"
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSString", "NSBundle"] }
-objc2-app-kit = { version = "0.3", features = ["NSScreen", "NSWindow"] }
+objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSString", "NSBundle", "NSURL", "NSArray", "NSUserDefaults"] }
+objc2-app-kit = { version = "0.3", features = ["NSScreen", "NSWindow", "NSApplication", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSEvent", "NSImage", "NSPasteboard", "NSPasteboardItem", "NSView", "NSWorkspace"] }
 
