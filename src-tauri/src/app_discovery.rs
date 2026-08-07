@@ -27,12 +27,40 @@ fn sort_paths_by_name(paths: &mut [PathBuf]) {
     });
 }
 
-fn get_apps_in_dir(dir: &PathBuf) -> Vec<PathBuf> {
+/// Bundle identifier of an .app bundle, read via NSBundle.
+#[cfg(target_os = "macos")]
+fn bundle_identifier(path: &std::path::Path) -> Option<String> {
+    use objc2_foundation::{NSBundle, NSString};
+    let ns_path = NSString::from_str(path.to_str()?);
+    let bundle = NSBundle::bundleWithPath(&ns_path)?;
+    let identifier = bundle.bundleIdentifier()?;
+    Some(identifier.to_string())
+}
+
+/// Whether the .app at `path` is this application itself (any copy of it).
+/// A launcher listing itself is useless at best: "launching" it while it is
+/// already frontmost only plays the quit animation, and with a second copy
+/// on disk it can even spawn a second instance.
+fn is_own_bundle(path: &std::path::Path, own_bundle_id: &str) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return bundle_identifier(path).as_deref() == Some(own_bundle_id);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (path, own_bundle_id);
+        false
+    }
+}
+
+fn get_apps_in_dir(dir: &PathBuf, own_bundle_id: &str) -> Vec<PathBuf> {
     let mut apps = Vec::new();
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "app") {
+            if path.extension().map_or(false, |ext| ext == "app")
+                && !is_own_bundle(&path, own_bundle_id)
+            {
                 apps.push(path);
             }
         }
@@ -41,7 +69,9 @@ fn get_apps_in_dir(dir: &PathBuf) -> Vec<PathBuf> {
     apps
 }
 
-pub(crate) fn discover_apps_and_folders() -> (Vec<PathBuf>, Vec<(PathBuf, Vec<PathBuf>)>) {
+pub(crate) fn discover_apps_and_folders(
+    own_bundle_id: &str,
+) -> (Vec<PathBuf>, Vec<(PathBuf, Vec<PathBuf>)>) {
     let mut apps = Vec::new();
     let mut folders: Vec<(PathBuf, Vec<PathBuf>)> = Vec::new();
 
@@ -50,10 +80,12 @@ pub(crate) fn discover_apps_and_folders() -> (Vec<PathBuf>, Vec<(PathBuf, Vec<Pa
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().map_or(false, |ext| ext == "app") {
-                    apps.push(path);
+                    if !is_own_bundle(&path, own_bundle_id) {
+                        apps.push(path);
+                    }
                 } else if path.is_dir() {
                     // Check for apps in subdirectory (1 level deep)
-                    let sub_apps = get_apps_in_dir(&path);
+                    let sub_apps = get_apps_in_dir(&path, own_bundle_id);
                     if sub_apps.len() >= 2 {
                         // Only create folder if 2+ apps
                         folders.push((path, sub_apps));

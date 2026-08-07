@@ -83,8 +83,8 @@ pub(crate) async fn get_app_icon(path: String) -> Option<String> {
 
 /// Get all apps and folders - loads icons in parallel for speed
 #[tauri::command]
-pub(crate) async fn get_apps() -> Result<AppsResponse, AppError> {
-    let (app_paths, folder_data) = discover_apps_and_folders();
+pub(crate) async fn get_apps(app: tauri::AppHandle) -> Result<AppsResponse, AppError> {
+    let (app_paths, folder_data) = discover_apps_and_folders(&app.config().identifier);
 
     // Load app icons in parallel
     let mut apps: Vec<AppInfo> = app_paths
