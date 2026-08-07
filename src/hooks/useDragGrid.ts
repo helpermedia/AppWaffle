@@ -119,19 +119,37 @@ function calculateOverlap(activeRect: Rect, targetRect: Rect): number {
 }
 
 /**
- * Check if an item is shifted (between active and target indices).
- * Shifted items use CSS transforms and their cached rects are not accurate.
+ * Check if an item is visually shifted by an active reorder.
+ * Must classify exactly the range GridTransforms.applyShifts transforms:
+ * forward drag shifts (active, target], backward drag shifts [target, active).
  */
 function isItemShifted(itemIndex: number, activeIndex: number, targetIndex: number): boolean {
   if (activeIndex === targetIndex) return false;
-  const minIdx = Math.min(activeIndex, targetIndex);
-  const maxIdx = Math.max(activeIndex, targetIndex);
-  // Items between active and target (exclusive of active) are shifted
-  return itemIndex > minIdx && itemIndex <= maxIdx;
+  return targetIndex > activeIndex
+    ? itemIndex > activeIndex && itemIndex <= targetIndex
+    : itemIndex >= targetIndex && itemIndex < activeIndex;
 }
 
 /**
- * Find the item with highest overlap (excluding the active item and shifted items).
+ * The rect an item visually occupies right now: its own cached rect, or —
+ * when shifted by the active reorder — the neighboring slot's rect, mirroring
+ * the transform GridTransforms.applyShifts applies.
+ */
+function getEffectiveRect(
+  item: GridItem,
+  items: GridItem[],
+  activeIndex: number,
+  targetIndex: number
+): Rect {
+  if (!isItemShifted(item.index, activeIndex, targetIndex)) return item.rect;
+  const slotItem = targetIndex > activeIndex ? items[item.index - 1] : items[item.index + 1];
+  return slotItem ? slotItem.rect : item.rect;
+}
+
+/**
+ * Find the item with highest overlap (excluding the active item), measuring
+ * each item at its effective (possibly shifted) position so shifted items
+ * remain valid folder-creation targets.
  */
 function findHighestOverlap(
   activeRect: Rect,
@@ -142,11 +160,10 @@ function findHighestOverlap(
   let highest: OverlapInfo | null = null;
 
   for (const item of items) {
-    // Skip active item and shifted items (their cached positions are invalid)
     if (item.index === activeIndex) continue;
-    if (isItemShifted(item.index, activeIndex, targetIndex)) continue;
 
-    const ratio = calculateOverlap(activeRect, item.rect);
+    const rect = getEffectiveRect(item, items, activeIndex, targetIndex);
+    const ratio = calculateOverlap(activeRect, rect);
     if (ratio > 0 && (highest === null || ratio > highest.ratio)) {
       highest = {
         targetId: item.id,
