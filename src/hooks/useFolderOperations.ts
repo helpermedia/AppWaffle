@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AppInfo, FolderMetadata } from "@/types/app";
-import { resolveFolderApps, removeAppFromFolder, updateFolderById } from "@/utils/folderUtils";
+import { removeAppFromFolder, updateFolderById } from "@/utils/folderUtils";
 import { categoryDisplayName } from "@/utils/appUtils";
 import type { GridFolder } from "@/components/items/FolderItem";
 
@@ -23,29 +23,26 @@ export function useFolderOperations({
   setOrder,
   saveOrder,
 }: UseFolderOperationsOptions) {
-  const [openFolder, setOpenFolder] = useState<GridFolder | null>(null);
+  // Only the id is state — name/apps of the open folder are derived live in
+  // useGrid from folders + appsMap, so there is a single source of truth
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   // Id of a folder created this session whose modal should open in rename
   // mode (Launchpad-style: new folder name is immediately editable)
   const [newFolderId, setNewFolderId] = useState<string | null>(null);
 
   function handleOpenFolder(folder: GridFolder) {
     setNewFolderId(null);
-    setOpenFolder(folder);
+    setOpenFolderId(folder.id);
   }
 
   function handleCloseFolder() {
     setNewFolderId(null);
-    setOpenFolder(null);
+    setOpenFolderId(null);
   }
 
   function handleRenameFolder(folderId: string, newName: string) {
     const updatedFolders = updateFolderById(folders, folderId, { name: newName });
     setFolders(updatedFolders);
-
-    // Update openFolder if it's the one being renamed
-    if (openFolder?.id === folderId) {
-      setOpenFolder({ ...openFolder, name: newName });
-    }
 
     if (order) {
       saveOrder(order, updatedFolders);
@@ -71,11 +68,10 @@ export function useFolderOperations({
       undefined;
 
     const newFolder = createNewFolder([targetAppId, sourceAppId], suggestedName);
-    const resolvedApps = resolveFolderApps(newFolder.appPaths, appsMap);
 
     // Open modal in rename mode
     setNewFolderId(newFolder.id);
-    setOpenFolder({ id: newFolder.id, name: newFolder.name, apps: resolvedApps });
+    setOpenFolderId(newFolder.id);
 
     // Update order - folder goes where target was
     const sourceIndex = order.indexOf(sourceAppId);
@@ -109,8 +105,7 @@ export function useFolderOperations({
     const updatedFolders = updateFolderById(folders, folderId, { appPaths: updatedAppPaths });
 
     // Open folder modal
-    const resolvedApps = resolveFolderApps(updatedAppPaths, appsMap);
-    setOpenFolder({ id: folderId, name: existingFolder.name, apps: resolvedApps });
+    setOpenFolderId(folderId);
 
     setFolders(updatedFolders);
     setOrder(newOrder);
@@ -118,11 +113,11 @@ export function useFolderOperations({
   }
 
   function handleRemoveFromFolder(appId: string) {
-    if (!openFolder || !order) return;
-    if (!folders.some((f) => f.id === openFolder.id)) return;
+    if (!openFolderId || !order) return;
+    if (!folders.some((f) => f.id === openFolderId)) return;
 
     const { newOrder, updatedFolders, dissolved } = removeAppFromFolder(
-      openFolder.id, appId, order, folders,
+      openFolderId, appId, order, folders,
     );
 
     setFolders(updatedFolders);
@@ -130,23 +125,18 @@ export function useFolderOperations({
     saveOrder(newOrder, updatedFolders);
 
     if (dissolved) {
-      setOpenFolder(null);
-    } else {
-      const folder = updatedFolders.find((f) => f.id === openFolder.id);
-      const resolvedApps = folder ? resolveFolderApps(folder.appPaths, appsMap) : [];
-      setOpenFolder({ ...openFolder, apps: resolvedApps });
+      setOpenFolderId(null);
     }
   }
 
   function getOpenFolderSavedOrder(): string[] | undefined {
-    if (!openFolder) return undefined;
-    const folder = folders.find((f) => f.id === openFolder.id);
-    return folder?.appPaths;
+    if (!openFolderId) return undefined;
+    return folders.find((f) => f.id === openFolderId)?.appPaths;
   }
 
   return {
-    openFolder,
-    setOpenFolder,
+    openFolderId,
+    setOpenFolderId,
     newFolderId,
     handleOpenFolder,
     handleCloseFolder,

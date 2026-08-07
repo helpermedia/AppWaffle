@@ -52,6 +52,22 @@ export function resolveOrderToAppItems(
 }
 
 /**
+ * Drop apps that no longer exist on disk from folder contents, and drop
+ * folders left with no apps at all. Heals configs referencing uninstalled
+ * apps: phantom entries would otherwise desync FolderModal reorders (DOM
+ * indices vs order array) and an all-apps-gone folder would render as a
+ * permanent empty tile that can never be dissolved.
+ */
+export function healFolders(
+  folders: FolderMetadata[],
+  knownAppPaths: ReadonlySet<string>
+): FolderMetadata[] {
+  return folders
+    .map((f) => ({ ...f, appPaths: f.appPaths.filter((p) => knownAppPaths.has(p)) }))
+    .filter((f) => f.appPaths.length > 0);
+}
+
+/**
  * Build the initial main-grid order from a saved order and discovered items.
  * Drops ids that no longer exist, apps that live inside folders, and
  * duplicates (healing configs corrupted by earlier versions), then appends

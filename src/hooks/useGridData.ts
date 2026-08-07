@@ -1,6 +1,6 @@
 import type { AppInfo, FolderInfo, FolderMetadata, OrderConfig } from "@/types/app";
 import { buildAppsMap } from "@/utils/appUtils";
-import { isFolderId, resolveFolderApps, resolveOrderToAppItems, convertPhysicalFolders, buildInitialOrder } from "@/utils/folderUtils";
+import { isFolderId, resolveFolderApps, resolveOrderToAppItems, convertPhysicalFolders, buildInitialOrder, healFolders } from "@/utils/folderUtils";
 import type { GridItem } from "@/components/items/AppItem";
 import type { GridFolder } from "@/components/items/FolderItem";
 
@@ -73,11 +73,13 @@ export function useGridData({
 
   // Initialize order once apps/folders load
   if (order === null && (apps.length > 0 || physicalFolders.length > 0)) {
-    // Check if we have saved folders or need to convert physical folders
+    // Check if we have saved folders or need to convert physical folders,
+    // then heal them: drop uninstalled apps and folders left empty
     const savedFolders = orderConfig?.folders ?? [];
-    const effectiveFolders = savedFolders.length > 0
-      ? savedFolders
-      : convertPhysicalFolders(physicalFolders);
+    const effectiveFolders = healFolders(
+      savedFolders.length > 0 ? savedFolders : convertPhysicalFolders(physicalFolders),
+      new Set(appsMap.keys())
+    );
 
     // Seed local folder state — from here on it is the single source of
     // truth (mutations append/update it, so it must start complete)

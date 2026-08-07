@@ -36,6 +36,9 @@ export function useGrid() {
     onDragEnd(info: DragEndInfo, reorder: () => void, complete: () => void) {
       handleFolderDragEnd(info, reorder, complete);
     },
+    onDragCancel() {
+      handleFolderDragCancel();
+    },
     getDropAnimationTarget(info: DropAnimationInfo) {
       if (!info.overId || info.overlapRatio < overlapThreshold) {
         return undefined;
@@ -77,19 +80,19 @@ export function useGrid() {
     dropTarget,
     handleDragMove: handleFolderDragMove,
     handleDragEnd: handleFolderDragEnd,
+    handleDragCancel: handleFolderDragCancel,
   } = useFolderCreation({
     getItemType: gridData.getItemType,
     onCreateFolder: folderOps.handleCreateFolder,
     onAddToFolder: folderOps.handleAddToFolder,
   });
 
-  // Live view of the open folder: openFolder state is a point-in-time
-  // snapshot, so late-loading icons and content changes would never show.
-  // Re-resolve from folders + appsMap each render; fall back to the
-  // snapshot briefly while a folder is dissolving.
-  const openFolderSnapshot = folderOps.openFolder;
-  const openFolderMeta = openFolderSnapshot
-    ? folders.find((f) => f.id === openFolderSnapshot.id)
+  // The open folder is fully derived: openFolderId + folders + appsMap are
+  // the sources of truth, so icon loads, renames and content changes are
+  // always live. When the folder is dissolved this becomes null in the
+  // same commit and the modal unmounts.
+  const openFolderMeta = folderOps.openFolderId
+    ? folders.find((f) => f.id === folderOps.openFolderId)
     : undefined;
   const openFolder = openFolderMeta
     ? {
@@ -97,12 +100,12 @@ export function useGrid() {
         name: openFolderMeta.name,
         apps: resolveFolderApps(openFolderMeta.appPaths, gridData.appsMap),
       }
-    : openFolderSnapshot;
+    : null;
 
   // Coordinator for drag handoff between folder and main grid
   const { coordinator } = useDragHandoff({
-    openFolder,
-    setOpenFolder: folderOps.setOpenFolder,
+    openFolderId: folderOps.openFolderId,
+    setOpenFolderId: folderOps.setOpenFolderId,
     folders,
     setFolders,
     dragGrid,

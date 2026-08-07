@@ -19,6 +19,7 @@ interface UseFolderCreationReturn {
   dropTarget: DropTargetState | null;
   handleDragMove: (info: DragMoveInfo) => void;
   handleDragEnd: (info: DragEndInfo, reorder: () => void, complete: DragCompleteCallback) => void;
+  handleDragCancel: () => void;
 }
 
 export function useFolderCreation({
@@ -186,9 +187,16 @@ export function useFolderCreation({
     complete();
   }
 
+  // Reset dwell timer and drop-target ring when a drag is cancelled
+  function handleDragCancel() {
+    clearHoverTimer();
+    setDropTarget(null);
+  }
+
   return {
     dropTarget,
     handleDragMove,
     handleDragEnd,
+    handleDragCancel,
   };
 }

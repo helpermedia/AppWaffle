@@ -6,6 +6,7 @@ import { cn } from "@/utils/cn";
 import { buildAppsMap } from "@/utils/appUtils";
 import { resolveOrderToAppItems } from "@/utils/folderUtils";
 import { useCloseAnimation } from "@/hooks/useCloseAnimation";
+import { useDocumentEscape } from "@/hooks/useDocumentEscape";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import type { DragCoordinator } from "@/lib/helper-dnd";
 
@@ -141,20 +142,16 @@ export function FolderModal({
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
 
-  // Escape closes the folder — document-level so it works regardless of
-  // focus. The rename input's own Escape handler stops propagation before
-  // this listener sees the event; mid-drag Escape cancels the drag.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Escape" || isEditing) return;
-      if (isDragging) {
-        cancelDrag();
-        return;
-      }
-      handleClose();
+  // Escape closes the folder; while renaming, the input's own Escape
+  // handler stops propagation before this listener sees the event.
+  // Mid-drag Escape cancels the drag; mid-handoff it must do nothing.
+  useDocumentEscape(() => {
+    if (isEditing || coordinator?.isHandoffInProgress()) return;
+    if (isDragging) {
+      cancelDrag();
+      return;
     }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    handleClose();
   });
 
   const handleBackdropClick = (e: React.MouseEvent) => {

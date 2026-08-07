@@ -217,20 +217,14 @@ export class DragEngine {
    * still-held pointer is eventually released.
    */
   cancelDrag(): void {
-    if (!this.state) return;
+    // Only while the pointer is still dragging: after release the drop is
+    // committed and settling — cancelling then would revert a completed
+    // gesture and arm a click suppressor for a pointer that is already up
+    if (!this.state || !this.pointerTracker.isActivelyDragging()) return;
 
     this.pointerTracker.suppressClickOnRelease();
-
-    this.ghostElement.destroy();
-    this.gridTransforms.reset();
-    this.slotDetection.reset();
-
-    // Stop tracking the in-flight pointer, re-arm for future drags
-    this.pointerTracker.disable();
-    this.pointerTracker.enable();
-
+    this.cancel();
     this.events.onDragCancel?.();
-    this.state = null;
   }
 
   private setupPointerCallbacks(): void {

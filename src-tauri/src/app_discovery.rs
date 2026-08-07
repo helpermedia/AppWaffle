@@ -63,29 +63,63 @@ pub(crate) fn app_category(_path: &str) -> Option<String> {
     None
 }
 
+/// Path of the .app bundle this process runs from (None in dev-server mode).
+fn own_bundle_path() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    exe.ancestors()
+        .find(|p| p.extension().map_or(false, |ext| ext == "app"))
+        .map(|p| p.to_path_buf())
+}
+
 /// Whether the .app at `path` is this application itself (any copy of it).
 /// A launcher listing itself is useless at best: "launching" it while it is
 /// already frontmost only plays the quit animation, and with a second copy
 /// on disk it can even spawn a second instance.
-fn is_own_bundle(path: &std::path::Path, own_bundle_id: &str) -> bool {
+///
+/// This runs per discovered app on the startup path (window still hidden),
+/// so the expensive Info.plist identifier read is gated behind two cheap
+/// checks: the running bundle's exact path, then a bundle-name match.
+fn is_own_bundle(
+    path: &std::path::Path,
+    own_bundle_id: &str,
+    own_app_path: Option<&std::path::Path>,
+) -> bool {
     #[cfg(target_os = "macos")]
     {
+        if own_app_path.is_some_and(|own| own == path) {
+            return true;
+        }
+        let needle = own_bundle_id
+            .rsplit('.')
+            .next()
+            .unwrap_or(own_bundle_id)
+            .to_lowercase();
+        let looks_like_self = path
+            .file_stem()
+            .is_some_and(|stem| stem.to_string_lossy().to_lowercase().contains(&needle));
+        if !looks_like_self {
+            return false;
+        }
         return bundle_identifier(path).as_deref() == Some(own_bundle_id);
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (path, own_bundle_id);
+        let _ = (path, own_bundle_id, own_app_path);
         false
     }
 }
 
-fn get_apps_in_dir(dir: &PathBuf, own_bundle_id: &str) -> Vec<PathBuf> {
+fn get_apps_in_dir(
+    dir: &PathBuf,
+    own_bundle_id: &str,
+    own_app_path: Option<&std::path::Path>,
+) -> Vec<PathBuf> {
     let mut apps = Vec::new();
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().map_or(false, |ext| ext == "app")
-                && !is_own_bundle(&path, own_bundle_id)
+                && !is_own_bundle(&path, own_bundle_id, own_app_path)
             {
                 apps.push(path);
             }
@@ -100,18 +134,20 @@ pub(crate) fn discover_apps_and_folders(
 ) -> (Vec<PathBuf>, Vec<(PathBuf, Vec<PathBuf>)>) {
     let mut apps = Vec::new();
     let mut folders: Vec<(PathBuf, Vec<PathBuf>)> = Vec::new();
+    let own_app = own_bundle_path();
+    let own_app_path = own_app.as_deref();
 
     for dir in get_applications_dirs() {
         if let Ok(entries) = fs::read_dir(&dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().map_or(false, |ext| ext == "app") {
-                    if !is_own_bundle(&path, own_bundle_id) {
+                    if !is_own_bundle(&path, own_bundle_id, own_app_path) {
                         apps.push(path);
                     }
                 } else if path.is_dir() {
                     // Check for apps in subdirectory (1 level deep)
-                    let sub_apps = get_apps_in_dir(&path, own_bundle_id);
+                    let sub_apps = get_apps_in_dir(&path, own_bundle_id, own_app_path);
                     if sub_apps.len() >= 2 {
                         // Only create folder if 2+ apps
                         folders.push((path, sub_apps));

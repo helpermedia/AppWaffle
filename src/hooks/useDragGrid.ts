@@ -63,6 +63,8 @@ interface UseDragGridOptions {
   onDragMove?: (info: DragMoveInfo) => void;
   /** Called when drag ends (for folder creation detection). Must call `complete()` to show original item. */
   onDragEnd?: (info: DragEndInfo, reorder: () => void, complete: DragCompleteCallback) => void;
+  /** Called when a drag is cancelled (Escape, pointercancel) so external drag state can reset */
+  onDragCancel?: () => void;
   /**
    * Called before drop animation to determine animation target.
    * Return null to skip animation (for folder actions).
@@ -208,6 +210,7 @@ export function useDragGrid({
   onOrderChange,
   onDragMove,
   onDragEnd,
+  onDragCancel,
   getDropAnimationTarget,
   onDragOutside,
   onDragExit,
@@ -228,6 +231,7 @@ export function useDragGrid({
   const onOrderChangeRef = useLatestRef(onOrderChange);
   const onDragMoveRef = useLatestRef(onDragMove);
   const onDragEndRef = useLatestRef(onDragEnd);
+  const onDragCancelRef = useLatestRef(onDragCancel);
   const getDropAnimationTargetRef = useLatestRef(getDropAnimationTarget);
   const onDragOutsideRef = useLatestRef(onDragOutside);
   const onDragExitRef = useLatestRef(onDragExit);
@@ -403,6 +407,8 @@ export function useDragGrid({
       setIsDragging(false);
       setActiveId(null);
       setActiveIndex(null);
+      // Let external drag state (folder-creation ring, dwell timer) reset too
+      onDragCancelRef.current?.();
     });
 
     engine.enable();
@@ -412,7 +418,7 @@ export function useDragGrid({
       engine.destroy();
       engineRef.current = null;
     };
-  }, [orderRef, onOrderChangeRef, onDragMoveRef, onDragEndRef, getDropAnimationTargetRef, onDragOutsideRef, onDragExitRef]);
+  }, [orderRef, onOrderChangeRef, onDragMoveRef, onDragEndRef, onDragCancelRef, getDropAnimationTargetRef, onDragOutsideRef, onDragExitRef]);
 
   // Track previous dragging state to detect when drag ends
   const wasDraggingRef = useRef(false);

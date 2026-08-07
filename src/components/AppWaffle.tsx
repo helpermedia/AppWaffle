@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useGrid } from "@/hooks/useGrid";
 import { useCloseAnimation } from "@/hooks/useCloseAnimation";
+import { useDocumentEscape } from "@/hooks/useDocumentEscape";
 import { AppItem } from "@/components/items/AppItem";
 import { FolderItem } from "@/components/items/FolderItem";
 import { FolderModal } from "@/components/FolderModal";
@@ -71,21 +72,15 @@ export function AppWaffle() {
     invoke("quit_after_delay", { delayMs: 900 });
   }
 
-  // App-global Escape, document-level: a fresh launch has no focused
-  // element, so an onKeyDown prop would never fire. While a folder is open
-  // its own listener owns Escape; mid-drag Escape cancels the drag instead.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Escape" || openFolder) return;
-      if (coordinator.isHandoffInProgress()) return;
-      if (isDragging) {
-        cancelDrag();
-        return;
-      }
-      closeApp();
+  // Escape peels one layer per press: the folder modal owns it while open,
+  // an active drag cancels, otherwise the launcher closes
+  useDocumentEscape(() => {
+    if (openFolder || coordinator.isHandoffInProgress()) return;
+    if (isDragging) {
+      cancelDrag();
+      return;
     }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    closeApp();
   });
 
   // Close on click outside (empty space)

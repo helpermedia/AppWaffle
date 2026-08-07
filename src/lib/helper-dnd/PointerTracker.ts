@@ -130,6 +130,11 @@ export class PointerTracker {
     this.cleanup();
   }
 
+  /** Whether a drag is active right now (pointer down and past activation) */
+  isActivelyDragging(): boolean {
+    return this.isDragging;
+  }
+
   /**
    * Arm click suppression for whenever the pointer is next released.
    * Used on programmatic drag cancel (e.g., Escape): the pointer is still

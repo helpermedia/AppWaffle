@@ -3,7 +3,6 @@ import { DragCoordinator } from "@/lib/helper-dnd";
 import type { HandoffRequest } from "@/lib/helper-dnd";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import type { FolderMetadata } from "@/types/app";
-import type { GridFolder } from "@/components/items/FolderItem";
 import { removeAppFromFolder } from "@/utils/folderUtils";
 import type { DragEngine } from "@/lib/helper-dnd";
 
@@ -15,8 +14,8 @@ interface DragGridHandle {
 }
 
 interface UseDragHandoffOptions {
-  openFolder: GridFolder | null;
-  setOpenFolder: (folder: GridFolder | null) => void;
+  openFolderId: string | null;
+  setOpenFolderId: (id: string | null) => void;
   folders: FolderMetadata[];
   setFolders: (folders: FolderMetadata[]) => void;
   dragGrid: DragGridHandle;
@@ -24,8 +23,8 @@ interface UseDragHandoffOptions {
 }
 
 export function useDragHandoff({
-  openFolder,
-  setOpenFolder,
+  openFolderId,
+  setOpenFolderId,
   folders,
   setFolders,
   dragGrid,
@@ -34,28 +33,28 @@ export function useDragHandoff({
   const [coordinator] = useState(() => new DragCoordinator({}));
 
   // Refs for handoff callback to access current state
-  const openFolderRef = useLatestRef(openFolder);
+  const openFolderIdRef = useLatestRef(openFolderId);
   const foldersRef = useLatestRef(folders);
   const dragGridRef = useLatestRef(dragGrid);
   const saveOrderRef = useLatestRef(saveOrder);
   const setFoldersRef = useLatestRef(setFolders);
-  const setOpenFolderRef = useLatestRef(setOpenFolder);
+  const setOpenFolderIdRef = useLatestRef(setOpenFolderId);
 
   // Wire up the coordinator's onHandoff (once on mount).
   // All values accessed via stable refs — no need to recreate on every render.
   /* eslint-disable react-hooks/immutability -- Coordinator is mutable by design */
   useEffect(() => {
     coordinator.onHandoff = async (request: HandoffRequest) => {
-      const currentOpenFolder = openFolderRef.current;
+      const currentOpenFolderId = openFolderIdRef.current;
       const currentDragGrid = dragGridRef.current;
       const currentFolders = foldersRef.current;
 
-      if (!currentOpenFolder || !currentDragGrid.order) return;
+      if (!currentOpenFolderId || !currentDragGrid.order) return;
 
-      if (!currentFolders.some((f) => f.id === currentOpenFolder.id)) return;
+      if (!currentFolders.some((f) => f.id === currentOpenFolderId)) return;
 
       const { newOrder, updatedFolders } = removeAppFromFolder(
-        currentOpenFolder.id,
+        currentOpenFolderId,
         request.itemId,
         currentDragGrid.order,
         currentFolders,
@@ -64,9 +63,9 @@ export function useDragHandoff({
       setFoldersRef.current(updatedFolders);
       currentDragGrid.setOrder(newOrder);
       saveOrderRef.current(newOrder, updatedFolders);
-      setOpenFolderRef.current(null);
+      setOpenFolderIdRef.current(null);
     };
-  }, [coordinator, openFolderRef, foldersRef, dragGridRef, saveOrderRef, setFoldersRef, setOpenFolderRef]);
+  }, [coordinator, openFolderIdRef, foldersRef, dragGridRef, saveOrderRef, setFoldersRef, setOpenFolderIdRef]);
   /* eslint-enable react-hooks/immutability */
 
   // Register main grid with coordinator once its engine exists (it does by
