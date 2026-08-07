@@ -115,6 +115,7 @@ export function useGrid() {
     itemIds: gridData.itemIds,
     activeItem: gridData.activeItem,
     openFolder,
+    newFolderId: folderOps.newFolderId,
 
     // DnD
     containerRef: dragGrid.containerRef,

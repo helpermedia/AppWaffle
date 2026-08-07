@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AppInfo, FolderMetadata } from "@/types/app";
 import { resolveFolderApps, removeAppFromFolder, updateFolderById } from "@/utils/folderUtils";
+import { categoryDisplayName } from "@/utils/appUtils";
 import type { GridFolder } from "@/components/items/FolderItem";
 
 interface UseFolderOperationsOptions {
@@ -23,12 +24,17 @@ export function useFolderOperations({
   saveOrder,
 }: UseFolderOperationsOptions) {
   const [openFolder, setOpenFolder] = useState<GridFolder | null>(null);
+  // Id of a folder created this session whose modal should open in rename
+  // mode (Launchpad-style: new folder name is immediately editable)
+  const [newFolderId, setNewFolderId] = useState<string | null>(null);
 
   function handleOpenFolder(folder: GridFolder) {
+    setNewFolderId(null);
     setOpenFolder(folder);
   }
 
   function handleCloseFolder() {
+    setNewFolderId(null);
     setOpenFolder(null);
   }
 
@@ -57,10 +63,18 @@ export function useFolderOperations({
   function handleCreateFolder(sourceAppId: string, targetAppId: string) {
     if (!order) return;
 
-    const newFolder = createNewFolder([targetAppId, sourceAppId]);
+    // Suggest a name from the apps' App Store category, like Launchpad:
+    // prefer the target's category, fall back to the source's
+    const suggestedName =
+      categoryDisplayName(appsMap.get(targetAppId)?.category) ??
+      categoryDisplayName(appsMap.get(sourceAppId)?.category) ??
+      undefined;
+
+    const newFolder = createNewFolder([targetAppId, sourceAppId], suggestedName);
     const resolvedApps = resolveFolderApps(newFolder.appPaths, appsMap);
 
-    // Open modal first
+    // Open modal in rename mode
+    setNewFolderId(newFolder.id);
     setOpenFolder({ id: newFolder.id, name: newFolder.name, apps: resolvedApps });
 
     // Update order - folder goes where target was
@@ -133,6 +147,7 @@ export function useFolderOperations({
   return {
     openFolder,
     setOpenFolder,
+    newFolderId,
     handleOpenFolder,
     handleCloseFolder,
     handleRenameFolder,

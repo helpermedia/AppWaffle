@@ -2,6 +2,8 @@ export interface AppInfo {
   name: string;
   path: string;
   icon: string | null;
+  /** App Store category identifier (LSApplicationCategoryType), if declared */
+  category: string | null;
 }
 
 export interface FolderInfo {

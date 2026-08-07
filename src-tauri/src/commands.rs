@@ -2,7 +2,7 @@ use rayon::prelude::*;
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::app_discovery::{discover_apps_and_folders, get_applications_dirs};
+use crate::app_discovery::{app_category, discover_apps_and_folders, get_applications_dirs};
 use crate::config::{
     get_config_path, AppConfig, AppInfo, AppsResponse, FolderInfo, FolderMetadata, OrderConfig,
     ORDER_STATE,
@@ -81,6 +81,20 @@ pub(crate) async fn get_app_icon(path: String) -> Option<String> {
     None
 }
 
+/// Build the AppInfo for an .app path. Category stays None here — it only
+/// feeds folder-name suggestions, so callers add it where that applies.
+fn app_info_from_path(path: &std::path::Path) -> Option<AppInfo> {
+    let name = path.file_stem()?.to_string_lossy().to_string();
+    let path_str = path.to_string_lossy().to_string();
+    let icon = get_icon_if_cached(&path_str);
+    Some(AppInfo {
+        name,
+        path: path_str,
+        category: None,
+        icon,
+    })
+}
+
 /// Get all apps and folders - loads icons in parallel for speed
 #[tauri::command]
 pub(crate) async fn get_apps(app: tauri::AppHandle) -> Result<AppsResponse, AppError> {
@@ -90,15 +104,10 @@ pub(crate) async fn get_apps(app: tauri::AppHandle) -> Result<AppsResponse, AppE
     let mut apps: Vec<AppInfo> = app_paths
         .into_par_iter()
         .filter_map(|path| {
-            let name = path.file_stem()?.to_string_lossy().to_string();
-            let path_str = path.to_string_lossy().to_string();
-            let icon = get_icon_if_cached(&path_str);
-
-            Some(AppInfo {
-                name,
-                path: path_str,
-                icon,
-            })
+            let mut info = app_info_from_path(&path)?;
+            // Only main-grid apps participate in folder creation
+            info.category = app_category(&info.path);
+            Some(info)
         })
         .collect();
 
@@ -117,17 +126,7 @@ pub(crate) async fn get_apps(app: tauri::AppHandle) -> Result<AppsResponse, AppE
 
             let folder_apps: Vec<AppInfo> = sub_app_paths
                 .into_par_iter()
-                .filter_map(|app_path| {
-                    let app_name = app_path.file_stem()?.to_string_lossy().to_string();
-                    let app_path_str = app_path.to_string_lossy().to_string();
-                    let icon = get_icon_if_cached(&app_path_str);
-
-                    Some(AppInfo {
-                        name: app_name,
-                        path: app_path_str,
-                        icon,
-                    })
-                })
+                .filter_map(|app_path| app_info_from_path(&app_path))
                 .collect();
 
             Some(FolderInfo {

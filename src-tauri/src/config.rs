@@ -10,6 +10,9 @@ pub struct AppInfo {
     pub name: String,
     pub path: String,
     pub icon: Option<String>,
+    /// App Store category identifier (LSApplicationCategoryType), if declared
+    #[serde(default)]
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

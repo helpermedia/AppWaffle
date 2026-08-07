@@ -11,6 +11,8 @@ import type { DragCoordinator } from "@/lib/helper-dnd";
 
 interface FolderModalProps {
   folder: GridFolder;
+  /** Open with the name in edit mode, selected (for newly created folders) */
+  autoEditName?: boolean;
   savedOrder?: string[];
   onOrderChange?: (newOrder: string[]) => void;
   onRename?: (newName: string) => void;
@@ -23,6 +25,7 @@ interface FolderModalProps {
 
 export function FolderModal({
   folder,
+  autoEditName = false,
   savedOrder,
   onOrderChange,
   onRename,
@@ -36,7 +39,9 @@ export function FolderModal({
   const initialOrder = savedOrder && savedOrder.length > 0 ? savedOrder : defaultOrder;
 
   const { isClosing, triggerClose } = useCloseAnimation();
-  const [isEditing, setIsEditing] = useState(false);
+  // New folders open straight into rename mode (Launchpad behavior);
+  // the input's ref callback focuses and selects the suggested name
+  const [isEditing, setIsEditing] = useState(autoEditName);
   const [editValue, setEditValue] = useState(folder.name);
   const didFocusRef = useRef(false);
   const onCloseRef = useLatestRef(onClose);

@@ -11,6 +11,7 @@ export function AppWaffle() {
     items,
     activeItem,
     openFolder,
+    newFolderId,
     containerRef,
     isDragging,
     activeId,
@@ -107,7 +108,9 @@ export function AppWaffle() {
     >
       {openFolder && (
         <FolderModal
+          key={openFolder.id}
           folder={openFolder}
+          autoEditName={openFolder.id === newFolderId}
           savedOrder={getOpenFolderSavedOrder()}
           onOrderChange={(newOrder) => handleFolderOrderChange(openFolder.id, newOrder)}
           onRename={(newName) => handleRenameFolder(openFolder.id, newName)}

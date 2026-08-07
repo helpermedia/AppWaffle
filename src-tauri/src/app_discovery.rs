@@ -31,10 +31,36 @@ fn sort_paths_by_name(paths: &mut [PathBuf]) {
 #[cfg(target_os = "macos")]
 fn bundle_identifier(path: &std::path::Path) -> Option<String> {
     use objc2_foundation::{NSBundle, NSString};
-    let ns_path = NSString::from_str(path.to_str()?);
-    let bundle = NSBundle::bundleWithPath(&ns_path)?;
-    let identifier = bundle.bundleIdentifier()?;
-    Some(identifier.to_string())
+    // Pool required: called off the main thread (no ambient autorelease pool)
+    objc2::rc::autoreleasepool(|_| {
+        let ns_path = NSString::from_str(path.to_str()?);
+        let bundle = NSBundle::bundleWithPath(&ns_path)?;
+        let identifier = bundle.bundleIdentifier()?;
+        Some(identifier.to_string())
+    })
+}
+
+/// App Store category identifier (LSApplicationCategoryType) of an .app,
+/// e.g. "public.app-category.developer-tools". Used for folder name
+/// suggestions, matching original Launchpad behavior.
+#[cfg(target_os = "macos")]
+pub(crate) fn app_category(path: &str) -> Option<String> {
+    use objc2_foundation::{NSBundle, NSString};
+    // Pool required: rayon worker threads have no autorelease pool, so
+    // autoreleased NSBundle/NSString would otherwise pin until thread exit
+    objc2::rc::autoreleasepool(|_| {
+        let ns_path = NSString::from_str(path);
+        let bundle = NSBundle::bundleWithPath(&ns_path)?;
+        let key = NSString::from_str("LSApplicationCategoryType");
+        let value = bundle.objectForInfoDictionaryKey(&key)?;
+        let category = value.downcast::<NSString>().ok()?;
+        Some(category.to_string())
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn app_category(_path: &str) -> Option<String> {
+    None
 }
 
 /// Whether the .app at `path` is this application itself (any copy of it).
