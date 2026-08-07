@@ -90,6 +90,8 @@ interface UseDragGridReturn {
   activeIndex: number | null;
   /** Get the underlying DragEngine instance (for coordination) */
   getEngine: () => DragEngine | null;
+  /** Cancel an in-progress drag (e.g., on Escape) */
+  cancelDrag: () => void;
 }
 
 /**
@@ -219,6 +221,7 @@ export function useDragGrid({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const getEngine = () => engineRef.current;
+  const cancelDrag = () => engineRef.current?.cancelDrag();
 
   // Keep refs for callbacks to avoid stale closures
   const orderRef = useLatestRef(order);
@@ -433,5 +436,6 @@ export function useDragGrid({
     activeId,
     activeIndex,
     getEngine,
+    cancelDrag,
   };
 }

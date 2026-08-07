@@ -210,6 +210,29 @@ export class DragEngine {
     this.state = null;
   }
 
+  /**
+   * Cancel the active drag programmatically (e.g., on Escape).
+   * Unlike cancel(), this emits onDragCancel so the React layer resets its
+   * state, and it swallows the click the browser will synthesize when the
+   * still-held pointer is eventually released.
+   */
+  cancelDrag(): void {
+    if (!this.state) return;
+
+    this.pointerTracker.suppressClickOnRelease();
+
+    this.ghostElement.destroy();
+    this.gridTransforms.reset();
+    this.slotDetection.reset();
+
+    // Stop tracking the in-flight pointer, re-arm for future drags
+    this.pointerTracker.disable();
+    this.pointerTracker.enable();
+
+    this.events.onDragCancel?.();
+    this.state = null;
+  }
+
   private setupPointerCallbacks(): void {
     this.pointerTracker.onDragStart = this.handleDragStart.bind(this);
     this.pointerTracker.onDragMove = this.handleDragMove.bind(this);

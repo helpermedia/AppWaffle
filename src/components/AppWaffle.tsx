@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useGrid } from "@/hooks/useGrid";
 import { useCloseAnimation } from "@/hooks/useCloseAnimation";
@@ -14,6 +14,7 @@ export function AppWaffle() {
     containerRef,
     isDragging,
     activeId,
+    cancelDrag,
     dropTarget,
     coordinator,
     handleOpenFolder,
@@ -69,11 +70,22 @@ export function AppWaffle() {
     invoke("quit_after_delay", { delayMs: 900 });
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape" && !openFolder) {
+  // App-global Escape, document-level: a fresh launch has no focused
+  // element, so an onKeyDown prop would never fire. While a folder is open
+  // its own listener owns Escape; mid-drag Escape cancels the drag instead.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape" || openFolder) return;
+      if (coordinator.isHandoffInProgress()) return;
+      if (isDragging) {
+        cancelDrag();
+        return;
+      }
       closeApp();
     }
-  }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  });
 
   // Close on click outside (empty space)
   function handleBackgroundClick(e: React.MouseEvent) {
@@ -88,11 +100,9 @@ export function AppWaffle() {
   return (
     <div
       ref={scrollRef}
-      tabIndex={-1}
-      className={`w-full h-full p-20 overflow-auto outline-none transition-opacity duration-300 ${
+      className={`w-full h-full p-20 overflow-auto transition-opacity duration-300 ${
         isClosing ? "opacity-0" : "opacity-100"
       }`}
-      onKeyDown={handleKeyDown}
       onClick={handleBackgroundClick}
     >
       {openFolder && (

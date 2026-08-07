@@ -56,7 +56,7 @@ export function FolderModal({
     }
   };
 
-  const { containerRef, order, isDragging, activeId, getEngine } = useDragGrid({
+  const { containerRef, order, isDragging, activeId, getEngine, cancelDrag } = useDragGrid({
     initialOrder,
     onOrderChange,
     onDragMove: handleDragMove,
@@ -136,13 +136,21 @@ export function FolderModal({
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    // Don't close if editing (input has its own Escape handler) or dragging
-    if (e.key === "Escape" && !isEditing && !isDragging) {
-      e.stopPropagation();
+  // Escape closes the folder — document-level so it works regardless of
+  // focus. The rename input's own Escape handler stops propagation before
+  // this listener sees the event; mid-drag Escape cancels the drag.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape" || isEditing) return;
+      if (isDragging) {
+        cancelDrag();
+        return;
+      }
       handleClose();
     }
-  }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  });
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     // Don't close if we're clicking inside the folder content or during drag
@@ -154,12 +162,10 @@ export function FolderModal({
 
   return (
     <div
-      tabIndex={-1}
       className={cn(
-        "h-full flex flex-col items-center justify-center outline-none",
+        "h-full flex flex-col items-center justify-center",
         isClosing ? "animate-fade-out" : "animate-fade-in"
       )}
-      onKeyDown={handleKeyDown}
       onClick={handleBackdropClick}
     >
       {isEditing ? (

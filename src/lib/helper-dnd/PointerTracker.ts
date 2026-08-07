@@ -130,6 +130,26 @@ export class PointerTracker {
     this.cleanup();
   }
 
+  /**
+   * Arm click suppression for whenever the pointer is next released.
+   * Used on programmatic drag cancel (e.g., Escape): the pointer is still
+   * down, and its eventual release will synthesize a click that must not
+   * reach the app.
+   */
+  suppressClickOnRelease(): void {
+    const cleanup = () => {
+      document.removeEventListener("pointerup", onUp, true);
+      document.removeEventListener("pointercancel", onCancel, true);
+    };
+    const onUp = () => {
+      cleanup();
+      PointerTracker.suppressNextClick();
+    };
+    const onCancel = () => cleanup();
+    document.addEventListener("pointerup", onUp, true);
+    document.addEventListener("pointercancel", onCancel, true);
+  }
+
   /** Swallow the single click event the browser synthesizes after a drag. */
   private static suppressNextClick(): void {
     const swallow = (e: MouseEvent) => {

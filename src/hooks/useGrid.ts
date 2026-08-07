@@ -120,6 +120,7 @@ export function useGrid() {
     containerRef: dragGrid.containerRef,
     isDragging: dragGrid.isDragging,
     activeId: dragGrid.activeId,
+    cancelDrag: dragGrid.cancelDrag,
     dropTarget,
 
     // Coordinator for folder handoff
