@@ -1,5 +1,6 @@
 import { use } from "react";
 import { ConfigContext, type ConfigContextValue } from "@/contexts/config";
+import { DEFAULT_DND_SETTINGS } from "@/constants/dnd";
 import type { DndSettings } from "@/types/app";
 
 export function useConfig(): ConfigContextValue {
@@ -11,5 +12,5 @@ export function useConfig(): ConfigContextValue {
 }
 
 export function useDndSettings(): DndSettings {
-  return useConfig().dnd;
+  return DEFAULT_DND_SETTINGS;
 }

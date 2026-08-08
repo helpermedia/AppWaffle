@@ -5,24 +5,23 @@ use std::sync::Mutex;
 
 use crate::AppError;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AppInfo {
     pub name: String,
     pub path: String,
     pub icon: Option<String>,
     /// App Store category identifier (LSApplicationCategoryType), if declared
-    #[serde(default)]
     pub category: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct FolderInfo {
     pub name: String,
     pub path: String,
     pub apps: Vec<AppInfo>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AppsResponse {
     pub apps: Vec<AppInfo>,
     pub folders: Vec<FolderInfo>,

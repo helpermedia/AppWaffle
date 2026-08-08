@@ -32,8 +32,6 @@ export interface OrderConfig {
 export interface DndSettings {
   /** How long to hold over an app before folder creation ring appears (ms) */
   folderCreationDelay: number;
-  /** How long before items shift to show the new drop position (ms) */
-  sortingDelay: number;
   /** Minimum overlap ratio (0-1) required for folder creation highlight */
   overlapThreshold: number;
 }
@@ -41,5 +39,4 @@ export interface DndSettings {
 export interface AppConfig {
   version: number;
   order: OrderConfig;
-  dnd?: DndSettings;
 }

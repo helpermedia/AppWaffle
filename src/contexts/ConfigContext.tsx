@@ -1,7 +1,6 @@
 import { use, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppConfig, DndSettings, FolderMetadata, OrderConfig } from "@/types/app";
-import { DEFAULT_DND_SETTINGS } from "@/constants/dnd";
+import type { AppConfig, FolderMetadata, OrderConfig } from "@/types/app";
 import { ConfigContext, type ConfigContextValue } from "./config";
 
 // Start loading config immediately at module load (parallel with app loading)
@@ -19,12 +18,6 @@ interface ConfigProviderProps {
 export function ConfigProvider({ children }: ConfigProviderProps) {
   const config = use(configPromise);
 
-  // Merge loaded settings with defaults
-  const dnd: DndSettings = {
-    ...DEFAULT_DND_SETTINGS,
-    ...config?.dnd,
-  };
-
   const orderConfig: OrderConfig | null = config?.order ?? null;
 
   // Update order in Rust memory (no disk I/O)
@@ -34,7 +27,6 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
   }
 
   const value: ConfigContextValue = {
-    dnd,
     orderConfig,
     saveOrder,
   };
