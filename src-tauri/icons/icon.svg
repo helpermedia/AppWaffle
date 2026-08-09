@@ -1,0 +1,50 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    AppWaffle icon — design source of truth.
+    A waffle grid is an app grid: golden field, 4x4 toasted pockets.
+
+    Full-bleed on purpose: macOS 26 Tahoe applies its own squircle mask
+    to edge-to-edge artwork, while art with baked-in margins/corners gets
+    shrunk onto a white system backing plate. Do not add margins or
+    rounded corners here.
+
+    Geometry: pockets 136px, gaps 56px -> 712px grid centered (inset 156),
+    clear of the system corner mask. Pocket gradient runs dark at the top
+    toward light at the bottom to read as concave; the extra-dark first
+    stop fakes an inner shadow without extra shapes.
+    Regenerate icons: rasterize to 1024px PNG, then `bun tauri icon <png>`.
+  -->
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F5BE60"/>
+      <stop offset="1" stop-color="#DD9430"/>
+    </linearGradient>
+    <linearGradient id="pocket" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8A5316"/>
+      <stop offset="0.18" stop-color="#9A5E1A"/>
+      <stop offset="1" stop-color="#AC6B22"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#base)"/>
+
+  <rect x="156" y="156" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="348" y="156" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="540" y="156" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="732" y="156" width="136" height="136" rx="30" fill="url(#pocket)"/>
+
+  <rect x="156" y="348" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="348" y="348" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="540" y="348" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="732" y="348" width="136" height="136" rx="30" fill="url(#pocket)"/>
+
+  <rect x="156" y="540" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="348" y="540" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="540" y="540" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="732" y="540" width="136" height="136" rx="30" fill="url(#pocket)"/>
+
+  <rect x="156" y="732" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="348" y="732" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="540" y="732" width="136" height="136" rx="30" fill="url(#pocket)"/>
+  <rect x="732" y="732" width="136" height="136" rx="30" fill="url(#pocket)"/>
+</svg>
