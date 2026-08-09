@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "AppWaffle",
+  "productName": "Wafflepad",
   "version": "0.1.0",
-  "identifier": "com.helpermedia.appwaffle",
+  "identifier": "com.helpermedia.wafflepad",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "AppWaffle",
+        "title": "Wafflepad",
         "fullscreen": false,
         "transparent": true,
         "decorations": false,
@@ -29,7 +29,7 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$CACHE/com.helpermedia.appwaffle/**", "$HOME/Library/Caches/com.helpermedia.appwaffle/**"]
+        "scope": ["$CACHE/com.helpermedia.wafflepad/**", "$HOME/Library/Caches/com.helpermedia.wafflepad/**"]
       }
     }
   },

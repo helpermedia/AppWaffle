@@ -66,12 +66,12 @@ pub(crate) static ORDER_STATE: Mutex<Option<OrderConfig>> = Mutex::new(None);
 /// Serializes disk writes so concurrent save_order_to_disk() calls don't interleave
 pub(crate) static SAVE_LOCK: Mutex<()> = Mutex::new(());
 
-/// Get config directory: ~/Library/Application Support/com.helpermedia.appwaffle/
+/// Get config directory: ~/Library/Application Support/com.helpermedia.wafflepad/
 pub(crate) fn get_config_dir() -> Option<PathBuf> {
-    dirs::config_dir().map(|p| p.join("com.helpermedia.appwaffle"))
+    dirs::config_dir().map(|p| p.join("com.helpermedia.wafflepad"))
 }
 
-/// Get config file path: ~/Library/Application Support/com.helpermedia.appwaffle/config.json
+/// Get config file path: ~/Library/Application Support/com.helpermedia.wafflepad/config.json
 pub(crate) fn get_config_path() -> Option<PathBuf> {
     get_config_dir().map(|p| p.join("config.json"))
 }

@@ -1,8 +1,8 @@
-# AppWaffle
+# Wafflepad
 
 Apple removed Launchpad in macOS 26 Tahoe. Time for a tastier way to launch your apps — served fresh in a crispy grid.
 
-AppWaffle is a modern, customizable app launcher built with Tauri, React and TypeScript. It saves your layout and remembers your preferences.
+Wafflepad is a modern, customizable app launcher built with Tauri, React and TypeScript. It saves your layout and remembers your preferences.
 
 ## Features
 
@@ -44,18 +44,18 @@ bun tauri build
 
 ## Data
 
-AppWaffle stores its data in standard macOS directories:
+Wafflepad stores its data in standard macOS directories:
 
-- **Config**: `~/Library/Application Support/com.helpermedia.appwaffle/config.json`
-- **Icon cache**: `~/Library/Caches/com.helpermedia.appwaffle/icons/`
+- **Config**: `~/Library/Application Support/com.helpermedia.wafflepad/config.json`
+- **Icon cache**: `~/Library/Caches/com.helpermedia.wafflepad/icons/`
 
 ## Known behavior
 
-When you drag an app onto the Dock, macOS may show a notification: *"AppWaffle was prevented from modifying apps on your Mac."*
+When you drag an app onto the Dock, macOS may show a notification: *"Wafflepad was prevented from modifying apps on your Mac."*
 
-This is harmless and the app still gets pinned. AppWaffle only hands the drag over to macOS — the system's own drag-and-drop machinery then tries to stamp tracking metadata (an extended attribute) on the dragged app bundle. Writing inside another app's bundle requires the App Management permission, so macOS blocks that bookkeeping write and shows the notification. Pinning is unaffected because the Dock only updates its own settings.
+This is harmless and the app still gets pinned. Wafflepad only hands the drag over to macOS — the system's own drag-and-drop machinery then tries to stamp tracking metadata (an extended attribute) on the dragged app bundle. Writing inside another app's bundle requires the App Management permission, so macOS blocks that bookkeeping write and shows the notification. Pinning is unaffected because the Dock only updates its own settings.
 
-AppWaffle never modifies other apps and does not need the permission. If the notification bothers you, you can enable AppWaffle under **System Settings → Privacy & Security → App Management** — but be aware that this grants it the right to update or delete other applications, which it does not need.
+Wafflepad never modifies other apps and does not need the permission. If the notification bothers you, you can enable Wafflepad under **System Settings → Privacy & Security → App Management** — but be aware that this grants it the right to update or delete other applications, which it does not need.
 
 ## License
 

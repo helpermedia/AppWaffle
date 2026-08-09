@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 /// Get icons cache directory
 fn get_icons_cache_dir() -> Option<PathBuf> {
-    dirs::cache_dir().map(|p| p.join("com.helpermedia.appwaffle").join("icons"))
+    dirs::cache_dir().map(|p| p.join("com.helpermedia.wafflepad").join("icons"))
 }
 
 /// Get a stable hash for an app path to use as icon filename

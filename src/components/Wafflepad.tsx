@@ -11,7 +11,7 @@ import { SearchField } from "@/components/SearchField";
 import { GRID_COLUMNS } from "@/constants/grid";
 import { searchApps } from "@/utils/searchUtils";
 
-export function AppWaffle() {
+export function Wafflepad() {
   const {
     items,
     activeItem,

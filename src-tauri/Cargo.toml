@@ -1,12 +1,12 @@
 [package]
-name = "appwaffle"
+name = "wafflepad"
 version = "0.1.0"
 description = "A macOS Launchpad alternative"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "appwaffle_lib"
+name = "wafflepad_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

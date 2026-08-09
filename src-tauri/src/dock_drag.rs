@@ -4,7 +4,7 @@
 //! pointer entering the Dock's screen region it calls `start_dock_drag`,
 //! which hands the in-flight gesture to an `NSDraggingSession` carrying the
 //! app bundle's file URL. The Dock pins any application file URL dropped on
-//! it — no Dock API involved. Because the AppWaffle window covers the whole
+//! it — no Dock API involved. Because the Wafflepad window covers the whole
 //! screen just below the Dock's window level, the Dock is the only external
 //! drop target the session can reach.
 
@@ -127,7 +127,7 @@ mod macos {
     define_class!(
         #[unsafe(super(NSObject))]
         #[thread_kind = MainThreadOnly]
-        #[name = "AppWaffleDockDragSource"]
+        #[name = "WafflepadDockDragSource"]
         #[ivars = SourceIvars]
         struct DockDragSource;
 

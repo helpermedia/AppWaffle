@@ -55,19 +55,19 @@ pub fn run() {
             // Create custom menu with proper capitalization
             let about = PredefinedMenuItem::about(
                 app,
-                Some("About AppWaffle"),
+                Some("About Wafflepad"),
                 Some(AboutMetadata::default()),
             )?;
             let quit = MenuItem::with_id(
                 app,
                 "quit",
-                "Quit AppWaffle",
+                "Quit Wafflepad",
                 true,
                 Some("CmdOrCtrl+Q"),
             )?;
             let app_menu = Submenu::with_items(
                 app,
-                "AppWaffle",
+                "Wafflepad",
                 true,
                 &[&about, &PredefinedMenuItem::separator(app)?, &quit],
             )?;

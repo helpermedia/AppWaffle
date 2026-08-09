@@ -46,7 +46,7 @@ export function useDockDrag({ getEngine, isPinnable }: UseDockDragOptions) {
     handedOff: false,
   });
 
-  // The zone is stable for the app's lifetime: AppWaffle quits on focus
+  // The zone is stable for the app's lifetime: Wafflepad quits on focus
   // loss, so the Dock can't be moved or resized while we're frontmost.
   useEffect(() => {
     let stale = false;

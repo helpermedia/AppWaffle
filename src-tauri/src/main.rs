@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    appwaffle_lib::run()
+    wafflepad_lib::run()
 }

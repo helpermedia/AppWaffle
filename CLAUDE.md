@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Project-specific instructions for Claude when working on AppWaffle.
+Project-specific instructions for Claude when working on Wafflepad.
 
 ## Skills
 
@@ -17,7 +17,7 @@ Use these skills for detailed code examples and comprehensive guidance.
 
 ## Project Overview
 
-AppWaffle is a macOS Launchpad alternative built with Tauri, React 19 and TypeScript. It provides a full-screen app launcher with vibrancy blur effect, drag-and-drop reordering and folder support.
+Wafflepad is a macOS Launchpad alternative built with Tauri, React 19 and TypeScript. It provides a full-screen app launcher with vibrancy blur effect, drag-and-drop reordering and folder support.
 
 ## Tech Stack
 
