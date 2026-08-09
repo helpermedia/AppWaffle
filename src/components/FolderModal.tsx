@@ -7,7 +7,9 @@ import { buildAppsMap } from "@/utils/appUtils";
 import { resolveOrderToAppItems } from "@/utils/folderUtils";
 import { useCloseAnimation } from "@/hooks/useCloseAnimation";
 import { useDocumentEscape } from "@/hooks/useDocumentEscape";
+import { useKeyboardNav } from "@/hooks/useKeyboardNav";
 import { useLatestRef } from "@/hooks/useLatestRef";
+import { GRID_COLUMNS } from "@/constants/grid";
 import type { DragCoordinator } from "@/lib/helper-dnd";
 
 interface FolderModalProps {
@@ -142,6 +144,18 @@ export function FolderModal({
 
   const activeItem = activeId ? items.find((i) => i.id === activeId) ?? null : null;
 
+  // Arrow keys move a selection through the folder grid, Enter launches;
+  // inert while renaming (the input owns the keyboard) or mid-drag
+  const { selectedId } = useKeyboardNav({
+    ids: items.map((i) => i.id),
+    columns: GRID_COLUMNS,
+    enabled: !isEditing && !isDragging && !isClosing,
+    onActivate: (id) => {
+      const app = items.find((i) => i.id === id);
+      if (app) onLaunch?.(app.path);
+    },
+  });
+
   // Escape closes the folder; while renaming, the input's own Escape
   // handler stops propagation before this listener sees the event.
   // Mid-drag Escape cancels the drag; mid-handoff it must do nothing.
@@ -210,7 +224,8 @@ export function FolderModal({
       >
         <div
           ref={containerRef}
-          className="grid grid-cols-7 gap-4 place-items-center"
+          className="grid gap-4 place-items-center"
+          style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))` }}
         >
           {items.map((item) => (
             <AppItem
@@ -218,6 +233,7 @@ export function FolderModal({
               item={item}
               isDragActive={activeItem !== null}
               isDragging={activeId === item.id}
+              isSelected={selectedId === item.id}
               onLaunch={onLaunch}
               isLaunching={launchingPath === item.path}
             />

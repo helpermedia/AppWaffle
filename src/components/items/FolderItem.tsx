@@ -36,12 +36,15 @@ export function FolderItem({
   isDragging,
   dropAction,
   onOpen,
+  isSelected,
 }: {
   item: GridFolder;
   isDragActive: boolean;
   isDragging: boolean;
   dropAction?: DropAction;
   onOpen: (folder: GridFolder) => void;
+  /** Keyboard-selection highlight */
+  isSelected?: boolean;
 }) {
   const handleClick = () => {
     // Only open if no drag is in progress (same guard as AppItem)
@@ -59,7 +62,8 @@ export function FolderItem({
         // Transition for smooth shifting during drag
         isDragActive && "transition-transform duration-200",
         // Hide original when being dragged (ghost is visible instead)
-        isDragging && "opacity-0 pointer-events-none"
+        isDragging && "opacity-0 pointer-events-none",
+        isSelected && "bg-white/15"
       )}
     >
       <div className="relative" data-drag-handle onClick={handleClick}>

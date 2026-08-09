@@ -7,12 +7,13 @@ AppWaffle is a modern, customizable app launcher built with Tauri, React and Typ
 ## Features
 
 - Full-screen app launcher with vibrancy blur effect
+- Type-to-search with ranked matches, including apps inside folders
 - Drag-and-drop reordering with macOS Launchpad-style behavior
 - Folder support: drag apps together to create, drag out to remove
 - Seamless drag handoff from folder modal to main grid
 - Drag an app onto the Dock to pin it, like the original Launchpad
 - Progressive icon loading with disk caching
-- Keyboard navigation (Arrow keys, Enter to launch, Escape to close)
+- Keyboard navigation: Arrow keys move the selection, Enter launches, Escape peels back search, drags and folders before closing
 - Click outside or press Escape to dismiss
 
 ## Requirements

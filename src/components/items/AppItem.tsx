@@ -15,6 +15,8 @@ export function AppItem({
   dropAction,
   onLaunch,
   isLaunching,
+  isSelected,
+  draggable = true,
 }: {
   item: GridItem;
   isDragActive: boolean;
@@ -22,6 +24,10 @@ export function AppItem({
   dropAction?: DropAction;
   onLaunch?: (path: string) => void;
   isLaunching?: boolean;
+  /** Keyboard-selection highlight */
+  isSelected?: boolean;
+  /** Set false to render as a plain launch tile (search results) */
+  draggable?: boolean;
 }) {
   function handleClick() {
     // Only launch if not currently dragging
@@ -32,7 +38,7 @@ export function AppItem({
 
   return (
     <Container
-      data-draggable
+      data-draggable={draggable ? true : undefined}
       data-id={item.id}
       onClick={handleClick}
       className={cn(
@@ -42,7 +48,8 @@ export function AppItem({
         // Hide original when being dragged (ghost is visible instead)
         isDragging && "opacity-0 pointer-events-none",
         // Grow animation when launching
-        isLaunching && "animate-launch-grow"
+        isLaunching && "animate-launch-grow",
+        isSelected && "bg-white/15"
       )}
     >
       <div className="relative" data-drag-handle>

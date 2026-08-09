@@ -1,11 +1,15 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useGrid } from "@/hooks/useGrid";
 import { useCloseAnimation } from "@/hooks/useCloseAnimation";
 import { useDocumentEscape } from "@/hooks/useDocumentEscape";
+import { useKeyboardNav } from "@/hooks/useKeyboardNav";
 import { AppItem } from "@/components/items/AppItem";
 import { FolderItem } from "@/components/items/FolderItem";
 import { FolderModal } from "@/components/FolderModal";
+import { SearchField } from "@/components/SearchField";
+import { GRID_COLUMNS } from "@/constants/grid";
+import { searchApps } from "@/utils/searchUtils";
 
 export function AppWaffle() {
   const {
@@ -28,8 +32,15 @@ export function AppWaffle() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const savedScrollTop = useRef(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [launchingPath, setLaunchingPath] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const { isClosing, setIsClosing, isClosingRef, triggerClose } = useCloseAnimation();
+
+  // Searching swaps the grid for a flat, ranked result list (drag disabled
+  // there — reordering a filtered view would corrupt the saved order)
+  const searchQuery = query.trim();
+  const searchResults = searchQuery ? searchApps(items, searchQuery) : null;
 
   // Save scroll position when opening folder
   function onOpenFolder(folder: Parameters<typeof handleOpenFolder>[0]) {
@@ -72,12 +83,72 @@ export function AppWaffle() {
     invoke("quit_after_delay", { delayMs: 900 });
   }
 
+  function handleActivate(id: string) {
+    if (searchResults) {
+      const app = searchResults.find((a) => a.id === id);
+      if (app) handleLaunch(app.path);
+      return;
+    }
+    const item = items.find((i) => i.data.id === id);
+    if (!item) return;
+    if (item.type === "app") {
+      handleLaunch(item.data.path);
+    } else {
+      onOpenFolder(item.data);
+    }
+  }
+
+  const navigableIds = searchResults
+    ? searchResults.map((app) => app.id)
+    : items.map((item) => item.data.id);
+
+  const { selectedId } = useKeyboardNav({
+    ids: navigableIds,
+    columns: GRID_COLUMNS,
+    enabled: !openFolder && !isDragging && !isClosing,
+    autoSelectFirst: searchResults !== null,
+    resetKey: searchQuery,
+    onActivate: handleActivate,
+  });
+
+  // Keep the search field focused so typing always searches (Launchpad
+  // behavior) — on mount and whenever the folder modal closes
+  useEffect(() => {
+    if (!openFolder) {
+      searchInputRef.current?.focus({ preventScroll: true });
+    }
+  }, [openFolder]);
+
+  const searchScrollTop = useRef(0);
+  const wasSearchingRef = useRef(false);
+
+  // Entering search saves the grid scroll position and starts results at
+  // the top (again on each keystroke); leaving search restores the grid
+  // position — mirrors the folder open/close flow
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (searchQuery) {
+      if (!wasSearchingRef.current) searchScrollTop.current = el.scrollTop;
+      el.scrollTop = 0;
+    } else if (wasSearchingRef.current) {
+      el.scrollTop = searchScrollTop.current;
+    }
+    wasSearchingRef.current = searchQuery !== "";
+  }, [searchQuery]);
+
   // Escape peels one layer per press: the folder modal owns it while open,
-  // an active drag cancels, otherwise the launcher closes
+  // an active drag cancels, a search query clears, otherwise close.
+  // Tests searchQuery (not query) so layers match what's on screen —
+  // whitespace-only input shows the normal grid and must not eat a press.
   useDocumentEscape(() => {
     if (openFolder || coordinator.isHandoffInProgress()) return;
     if (isDragging) {
       cancelDrag();
+      return;
+    }
+    if (searchQuery) {
+      setQuery("");
       return;
     }
     closeApp();
@@ -88,8 +159,27 @@ export function AppWaffle() {
     // Don't close if folder is open, dragging, or clicking on an item
     if (openFolder || isDragging) return;
     const target = e.target as HTMLElement;
-    if (!target.closest("[data-draggable]")) {
+    if (!target.closest("[data-grid-item], [data-keep-open]")) {
       closeApp();
+    }
+  }
+
+  // Clicks must not steal focus from the search field — except clicks into
+  // real editable controls, or while another editable (the folder rename
+  // input) holds focus: it commits on blur, so the click-away must be
+  // allowed to blur it or the rename would be lost.
+  // Note: this supersedes the label-selectability affordance of icon-scoped
+  // drag handles (helper-dnd README) — moot here, as body-level select-none
+  // already disables label selection app-wide.
+  function handleRootMouseDown(e: React.MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest("input, textarea")) return;
+    const active = document.activeElement;
+    const editableAwaitingBlur =
+      (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) &&
+      !active.hasAttribute("data-search-input");
+    if (!editableAwaitingBlur) {
+      e.preventDefault();
     }
   }
 
@@ -100,6 +190,7 @@ export function AppWaffle() {
         isClosing ? "opacity-0" : "opacity-100"
       }`}
       onClick={handleBackgroundClick}
+      onMouseDown={handleRootMouseDown}
     >
       {openFolder && (
         <FolderModal
@@ -117,39 +208,78 @@ export function AppWaffle() {
       )}
 
       <div className={openFolder ? "hidden" : undefined}>
-        <div
-          ref={containerRef}
-          className="grid grid-cols-7 gap-4 place-items-center max-w-7xl mx-auto"
-        >
-          {items.map((item) => {
-            const isDropTarget = dropTarget?.id === item.data.id;
-            const dropAction = isDropTarget ? dropTarget.action : undefined;
+        <SearchField
+          ref={searchInputRef}
+          value={query}
+          onChange={setQuery}
+          readOnly={isDragging}
+        />
 
-            if (item.type === "app") {
-              return (
+        {searchResults &&
+          (searchResults.length > 0 ? (
+            <div
+              className="grid gap-4 place-items-center max-w-7xl mx-auto"
+              style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))` }}
+            >
+              {searchResults.map((app) => (
                 <AppItem
-                  key={item.data.id}
-                  item={item.data}
-                  isDragActive={activeItem !== null}
-                  isDragging={activeId === item.data.id}
-                  dropAction={dropAction}
+                  key={app.id}
+                  item={app}
+                  draggable={false}
+                  isDragActive={false}
+                  isDragging={false}
+                  isSelected={selectedId === app.id}
                   onLaunch={handleLaunch}
-                  isLaunching={launchingPath === item.data.path}
+                  isLaunching={launchingPath === app.path}
                 />
-              );
-            } else {
-              return (
-                <FolderItem
-                  key={item.data.id}
-                  item={item.data}
-                  isDragActive={activeItem !== null}
-                  isDragging={activeId === item.data.id}
-                  dropAction={dropAction}
-                  onOpen={onOpenFolder}
-                />
-              );
-            }
-          })}
+              ))}
+            </div>
+          ) : (
+            <p data-keep-open className="mt-24 text-center text-2xl text-white/50">
+              No Results
+            </p>
+          ))}
+
+        {/* Kept mounted (hidden) during search so the drag engine's DOM,
+            scroll position and icon state survive the search view */}
+        <div className={searchResults ? "hidden" : undefined}>
+          <div
+            ref={containerRef}
+            className="grid gap-4 place-items-center max-w-7xl mx-auto"
+            style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))` }}
+          >
+            {items.map((item) => {
+              const isDropTarget = dropTarget?.id === item.data.id;
+              const dropAction = isDropTarget ? dropTarget.action : undefined;
+
+              if (item.type === "app") {
+                return (
+                  <AppItem
+                    key={item.data.id}
+                    item={item.data}
+                    isDragActive={activeItem !== null}
+                    isDragging={activeId === item.data.id}
+                    dropAction={dropAction}
+                    isSelected={selectedId === item.data.id}
+                    onLaunch={handleLaunch}
+                    isLaunching={launchingPath === item.data.path}
+                  />
+                );
+              } else {
+                return (
+                  <FolderItem
+                    key={item.data.id}
+                    item={item.data}
+                    isDragActive={activeItem !== null}
+                    isDragging={activeId === item.data.id}
+                    dropAction={dropAction}
+                    isSelected={selectedId === item.data.id}
+                    onOpen={onOpenFolder}
+                  />
+                );
+              }
+            })}
+          </div>
         </div>
       </div>
     </div>
