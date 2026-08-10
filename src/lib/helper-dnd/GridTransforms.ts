@@ -8,6 +8,28 @@ interface TransformOptions {
 }
 
 /**
+ * Whether an item is visually displaced by the active reorder.
+ * Forward drags shift (active, target], backward drags shift [target, active).
+ * Single source of truth for the shifted range — applyShifts renders it,
+ * SlotDetection and overlap checks must classify with the same rule.
+ */
+export function isItemShifted(itemIndex: number, activeIndex: number, targetIndex: number): boolean {
+  if (activeIndex === targetIndex) return false;
+  return targetIndex > activeIndex
+    ? itemIndex > activeIndex && itemIndex <= targetIndex
+    : itemIndex >= targetIndex && itemIndex < activeIndex;
+}
+
+/**
+ * The slot an item currently occupies: its own index, unless shifted by the
+ * active reorder — then the neighboring slot toward the vacated origin.
+ */
+export function effectiveSlot(itemIndex: number, activeIndex: number, targetIndex: number): number {
+  if (!isItemShifted(itemIndex, activeIndex, targetIndex)) return itemIndex;
+  return targetIndex > activeIndex ? itemIndex - 1 : itemIndex + 1;
+}
+
+/**
  * Handles the visual shifting of items when the target index changes.
  *
  * Responsibilities:
@@ -68,21 +90,17 @@ export class GridTransforms {
     return this.items;
   }
 
-  /** Apply shifts based on active and target indices */
+  /**
+   * Apply shifts based on active and target indices.
+   * target === active animates every shifted item back home (the drag
+   * returned to its origin) — reset() stays reserved for drag end, where
+   * the snap must be instant.
+   */
   applyShifts(activeIndex: number, targetIndex: number): void {
-    if (activeIndex === targetIndex) {
-      // No shift needed, reset all
-      this.reset();
-      return;
-    }
-
-    const activeItem = this.items[activeIndex];
-    if (!activeItem) return;
-
-    // Determine shift direction and range
-    const movingForward = targetIndex > activeIndex;
-    const startIdx = movingForward ? activeIndex + 1 : targetIndex;
-    const endIdx = movingForward ? targetIndex : activeIndex - 1;
+    // Public API: out-of-range indices must render nothing rather than
+    // mis-classify the shifted range. (The engine always passes indices
+    // of cached items, but external callers get the boundary check.)
+    if (!this.items[activeIndex] || !this.items[targetIndex]) return;
 
     for (const item of this.items) {
       if (item.index === activeIndex) {
@@ -90,15 +108,11 @@ export class GridTransforms {
         continue;
       }
 
-      if (item.index >= startIdx && item.index <= endIdx) {
-        // This item needs to shift
-        const shiftTarget = movingForward
-          ? this.items[item.index - 1]
-          : this.items[item.index + 1];
-
-        if (shiftTarget) {
-          const dx = shiftTarget.rect.left - item.rect.left;
-          const dy = shiftTarget.rect.top - item.rect.top;
+      if (isItemShifted(item.index, activeIndex, targetIndex)) {
+        const slotItem = this.items[effectiveSlot(item.index, activeIndex, targetIndex)];
+        if (slotItem) {
+          const dx = slotItem.rect.left - item.rect.left;
+          const dy = slotItem.rect.top - item.rect.top;
           item.element.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
         }
       } else {

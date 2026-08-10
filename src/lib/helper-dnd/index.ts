@@ -8,7 +8,7 @@ export { DragCoordinator } from "./DragCoordinator";
 export { PointerTracker } from "./PointerTracker";
 export { GhostElement } from "./GhostElement";
 export { SlotDetection } from "./SlotDetection";
-export { GridTransforms } from "./GridTransforms";
+export { GridTransforms, isItemShifted, effectiveSlot } from "./GridTransforms";
 
 // Utilities
 export { isPointOutsideRect } from "./types";

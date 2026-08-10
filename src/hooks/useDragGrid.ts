@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { DragEngine, isPointOutsideRect } from "@/lib/helper-dnd";
+import { DragEngine, isPointOutsideRect, effectiveSlot } from "@/lib/helper-dnd";
 import type { GridItem, DragState, Rect, Point, DropAnimationTarget } from "@/lib/helper-dnd";
 import { useLatestRef } from "@/hooks/useLatestRef";
 
@@ -125,21 +125,9 @@ function calculateOverlap(activeRect: Rect, targetRect: Rect): number {
 }
 
 /**
- * Check if an item is visually shifted by an active reorder.
- * Must classify exactly the range GridTransforms.applyShifts transforms:
- * forward drag shifts (active, target], backward drag shifts [target, active).
- */
-function isItemShifted(itemIndex: number, activeIndex: number, targetIndex: number): boolean {
-  if (activeIndex === targetIndex) return false;
-  return targetIndex > activeIndex
-    ? itemIndex > activeIndex && itemIndex <= targetIndex
-    : itemIndex >= targetIndex && itemIndex < activeIndex;
-}
-
-/**
- * The rect an item visually occupies right now: its own cached rect, or —
- * when shifted by the active reorder — the neighboring slot's rect, mirroring
- * the transform GridTransforms.applyShifts applies.
+ * The rect an item visually occupies right now: the cached rect of its
+ * effective slot — its own, or the neighboring slot when shifted by the
+ * active reorder (shared classification with GridTransforms.applyShifts).
  */
 function getEffectiveRect(
   item: GridItem,
@@ -147,8 +135,7 @@ function getEffectiveRect(
   activeIndex: number,
   targetIndex: number
 ): Rect {
-  if (!isItemShifted(item.index, activeIndex, targetIndex)) return item.rect;
-  const slotItem = targetIndex > activeIndex ? items[item.index - 1] : items[item.index + 1];
+  const slotItem = items[effectiveSlot(item.index, activeIndex, targetIndex)];
   return slotItem ? slotItem.rect : item.rect;
 }
 

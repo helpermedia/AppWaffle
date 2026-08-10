@@ -1,3 +1,4 @@
+import { effectiveSlot } from "./GridTransforms";
 import type { GridItem, Point } from "./types";
 
 interface SlotDetectionOptions {
@@ -44,6 +45,9 @@ interface GridLayout {
  * - Detect when we cross a target item's center
  * - Only count crossings in the direction we're moving
  * - All items between origin and target shift at once
+ * - Shifted items are crossed at the slot they were displaced into, and
+ *   crossing one sends the target there — returning it home. This is what
+ *   makes dragging back (including to the origin slot) work.
  */
 export class SlotDetection {
   private layout: GridLayout | null = null;
@@ -145,12 +149,15 @@ export class SlotDetection {
     // Determine primary movement axis (which direction dominates)
     const isHorizontalPrimary = Math.abs(deltaX) >= Math.abs(deltaY);
 
-    // Check items we might cross
+    // Check items we might cross, each at the slot it currently occupies —
+    // items shifted by this reorder sit one slot over, and crossing one
+    // there means "send the target to that slot" (which returns it home)
     for (const item of this.items) {
       // Skip the active item
       if (item.index === this.activeIndex) continue;
 
-      const targetCenter = item.rect.center;
+      const occupiedSlot = effectiveSlot(item.index, this.activeIndex, this.targetIndex);
+      const targetCenter = this.items[occupiedSlot]?.rect.center ?? item.rect.center;
 
       // Check if we crossed this item's center
       if (isHorizontalPrimary) {
@@ -167,7 +174,7 @@ export class SlotDetection {
           // Verify we're in the same row (Y within icon size, not full item height)
           const yDistance = Math.abs(currentCenter.y - targetCenter.y);
           if (yDistance < this.layout.iconSize) {
-            return item.index;
+            return occupiedSlot;
           }
         }
       } else {
@@ -184,7 +191,7 @@ export class SlotDetection {
           // Verify we're in the same column (X within icon size)
           const xDistance = Math.abs(currentCenter.x - targetCenter.x);
           if (xDistance < this.layout.iconSize) {
-            return item.index;
+            return occupiedSlot;
           }
         }
       }
