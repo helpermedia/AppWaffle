@@ -265,18 +265,34 @@ interface GridItem {
 
 interface DragState {
   activeItem: GridItem;
-  startPointer: Point;
-  currentPointer: Point;
-  previousPointer: Point;
-  activeCenter: Point;
+  startPointer: Point;     // viewport frame
+  currentPointer: Point;   // viewport frame
+  previousPointer: Point;  // viewport frame
+  activeCenter: Point;     // drag-start frame (includes scrollDelta)
   targetIndex: number;
+  scrollDelta: number;     // host scroll accumulated since drag start
 }
 
 interface DropAnimationTarget {
-  center: Point;
+  center: Point;           // viewport frame
   duration?: number;
 }
 ```
+
+#### Coordinate Frames
+
+Item positions are cached once at drag start, so two coordinate frames
+coexist while the scroll host moves during a drag:
+
+- **Drag-start frame** — `GridItem.rect`, `DragState.activeCenter`, and
+  `getSlotCenter()`. Compare these against each other only.
+- **Viewport frame** — the `DragState` pointer fields and any `center`
+  returned from `getDropAnimationTarget` (the ghost animates in the
+  viewport).
+
+`scrollDelta` bridges them: `startFrameY = viewportY + scrollDelta`.
+Mixing frames without it produces silently wrong targeting once the user
+scrolls mid-drag.
 
 ### DragCoordinator
 
@@ -359,6 +375,22 @@ Only the area with `data-drag-handle` initiates drag. This allows labels to be s
   </div>
   <span>Selectable Label</span>  <!-- Can be selected/clicked -->
 </div>
+```
+
+### Edge Auto-Scroll
+
+When the grid lives inside a scrollable container, dragging within 80px of
+the container's top or bottom edge scrolls it continuously, speed easing up
+toward the edge. The engine finds the nearest scrollable ancestor
+automatically and keeps slot detection accurate across scrolling (manual
+wheel scrolling mid-drag included). Configure or disable via options:
+
+```typescript
+new DragEngine(container, {
+  autoScroll: true,        // default
+  autoScrollEdgeSize: 80,  // px from edge where scrolling engages
+  autoScrollMaxSpeed: 16,  // px per frame at the deepest point
+});
 ```
 
 ### Multi-Grid Handoff

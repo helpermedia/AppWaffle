@@ -170,16 +170,17 @@ function findHighestOverlap(
 }
 
 /**
- * Calculate the current rect of the active (dragged) item based on pointer movement.
+ * The current rect of the active (dragged) item, derived from
+ * state.activeCenter — which lives in the drag-start coordinate frame, so
+ * comparisons against cached item rects stay valid while the host scrolls.
  */
 function getActiveRect(state: DragState): Rect {
-  const dx = state.currentPointer.x - state.startPointer.x;
-  const dy = state.currentPointer.y - state.startPointer.y;
+  const { width, height } = state.activeItem.rect;
   return {
-    left: state.activeItem.rect.left + dx,
-    top: state.activeItem.rect.top + dy,
-    width: state.activeItem.rect.width,
-    height: state.activeItem.rect.height,
+    left: state.activeCenter.x - width / 2,
+    top: state.activeCenter.y - height / 2,
+    width,
+    height,
     center: state.activeCenter,
   };
 }

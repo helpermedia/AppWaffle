@@ -25,16 +25,26 @@ export interface GridItem {
 export interface DragState {
   /** Item being dragged */
   activeItem: GridItem;
-  /** Starting pointer position */
+  /** Starting pointer position (viewport coordinates) */
   startPointer: Point;
-  /** Current pointer position */
+  /** Current pointer position (viewport coordinates) */
   currentPointer: Point;
-  /** Previous frame pointer position (for crossing detection) */
+  /** Previous frame pointer position (viewport coordinates) */
   previousPointer: Point;
-  /** Current center of dragged item */
+  /**
+   * Current center of the dragged item in the drag-start coordinate frame:
+   * pointer-derived, plus scrollDelta. Item rects are cached at drag start,
+   * so this is the value to compare against them.
+   */
   activeCenter: Point;
   /** Index where item would be inserted */
   targetIndex: number;
+  /**
+   * How far the scroll host has scrolled since drag start (auto-scroll and
+   * manual wheel alike). Bridges live viewport coordinates and the cached
+   * drag-start frame: startFrameY = viewportY + scrollDelta.
+   */
+  scrollDelta: number;
 }
 
 /** Drop animation target info */
@@ -82,4 +92,10 @@ export interface DragOptions {
   ghostClass?: string;
   /** CSS class applied to item being dragged */
   draggingClass?: string;
+  /** Edge auto-scroll of the nearest scrollable ancestor (default: true) */
+  autoScroll?: boolean;
+  /** Edge zone size in px where auto-scroll engages (default: 80) */
+  autoScrollEdgeSize?: number;
+  /** Maximum auto-scroll speed in px per frame (default: 16) */
+  autoScrollMaxSpeed?: number;
 }

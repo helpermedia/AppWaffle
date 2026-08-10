@@ -2,6 +2,7 @@ import { PointerTracker } from "./PointerTracker";
 import { GhostElement } from "./GhostElement";
 import { SlotDetection } from "./SlotDetection";
 import { GridTransforms } from "./GridTransforms";
+import { AutoScroller } from "./AutoScroller";
 import type { Point, GridItem, DragState, DragEvents, DragOptions } from "./types";
 
 /**
@@ -21,6 +22,7 @@ export class DragEngine {
   private ghostElement: GhostElement;
   private slotDetection: SlotDetection;
   private gridTransforms: GridTransforms;
+  private autoScroller: AutoScroller;
 
   private state: DragState | null = null;
   private events: Partial<DragEvents> = {};
@@ -31,6 +33,9 @@ export class DragEngine {
     iconSize: 96,
     ghostClass: "drag-ghost",
     draggingClass: "is-dragging",
+    autoScroll: true,
+    autoScrollEdgeSize: 80,
+    autoScrollMaxSpeed: 16,
   };
 
   constructor(container: HTMLElement, options: DragOptions = {}) {
@@ -47,6 +52,15 @@ export class DragEngine {
     this.gridTransforms = new GridTransforms({
       transitionDuration: this.options.shiftDuration,
     });
+    this.autoScroller = new AutoScroller({
+      edgeSize: this.options.autoScrollEdgeSize,
+      maxSpeed: this.options.autoScrollMaxSpeed,
+    });
+    // Auto-scroll moves content under a stationary pointer — re-run move
+    // processing so slot detection tracks the drift between pointer events
+    this.autoScroller.onScroll = () => {
+      if (this.state) this.processMove(this.state.currentPointer);
+    };
 
     this.setupPointerCallbacks();
   }
@@ -62,6 +76,7 @@ export class DragEngine {
     this.ghostElement.destroy();
     this.gridTransforms.reset();
     this.slotDetection.reset();
+    this.autoScroller.stop();
     this.state = null;
     this.events = {}; // Clear event handlers to prevent memory leaks
   }
@@ -168,6 +183,7 @@ export class DragEngine {
       previousPointer: pointer,
       activeCenter,
       targetIndex: activeIndex,
+      scrollDelta: 0,
     };
 
     // Adopt existing ghost or create new one
@@ -179,6 +195,12 @@ export class DragEngine {
 
     // Initialize slot detection
     this.slotDetection.initialize(items, activeIndex);
+
+    // Positions were just cached at the current scroll offset — track
+    // scrolling from here for edge auto-scroll and frame correction
+    if (this.options.autoScroll) {
+      this.autoScroller.start(this.container);
+    }
 
     // Adopt the pointer tracking (listen for move/up events)
     this.pointerTracker.adoptDrag();
@@ -200,6 +222,7 @@ export class DragEngine {
     }
     this.gridTransforms.reset();
     this.slotDetection.reset();
+    this.autoScroller.stop();
 
     // Clean up pointer tracking to stop receiving events
     this.pointerTracker.disable();
@@ -266,6 +289,7 @@ export class DragEngine {
       previousPointer: pointer,
       activeCenter: activeItem.rect.center,
       targetIndex: activeIndex,
+      scrollDelta: 0,
     };
 
     // Create ghost
@@ -276,22 +300,41 @@ export class DragEngine {
     // Initialize slot detection
     this.slotDetection.initialize(items, activeIndex);
 
+    // Positions were just cached at the current scroll offset — track
+    // scrolling from here for edge auto-scroll and frame correction
+    if (this.options.autoScroll) {
+      this.autoScroller.start(this.container);
+    }
+
     // Emit event
     this.events.onDragStart?.(activeItem);
   }
 
   private handleDragMove(pointer: Point): void {
     if (!this.state) return;
+    // Engage/disengage edge auto-scroll for this pointer position, then
+    // process the move (host scroll events re-enter processMove between
+    // pointer events via the onScroll wiring)
+    this.autoScroller.update(pointer);
+    this.processMove(pointer);
+  }
+
+  private processMove(pointer: Point): void {
+    if (!this.state) return;
 
     // Update ghost position
     this.ghostElement.updatePosition(pointer);
 
-    // Calculate new center position
+    this.state.scrollDelta = this.autoScroller.getScrollDelta();
+
+    // New center in the drag-start frame: cached rects don't move when the
+    // host scrolls — the content under the pointer does. scrollDelta
+    // bridges the live pointer into the cached coordinate space.
     const dx = pointer.x - this.state.startPointer.x;
     const dy = pointer.y - this.state.startPointer.y;
     const newCenter: Point = {
       x: this.state.activeItem.rect.center.x + dx,
-      y: this.state.activeItem.rect.center.y + dy,
+      y: this.state.activeItem.rect.center.y + dy + this.state.scrollDelta,
     };
 
     // Check for slot change
@@ -318,6 +361,14 @@ export class DragEngine {
   private async handleDragEnd(_pointer: Point): Promise<void> {
     if (!this.state) return;
 
+    // Fold any scroll since the last event into detection and the cached
+    // delta BEFORE stopping the scroller — stop() zeroes getScrollDelta(),
+    // and wheel scrolling with a still pointer never triggers a move
+    this.processMove(this.state.currentPointer);
+    if (!this.state) return; // processMove can cascade into a cancel
+
+    this.autoScroller.stop();
+
     const fromIndex = this.state.activeItem.index;
     const toIndex = this.state.targetIndex;
 
@@ -326,8 +377,13 @@ export class DragEngine {
 
     // If no callback provided, use default behavior (animate to reorder slot)
     if (animationTarget === undefined) {
+      // Slot centers live in the drag-start frame; the ghost animates in
+      // the viewport, so convert back across the accumulated scroll
       const targetCenter = this.slotDetection.getSlotCenter(toIndex);
-      animationTarget = { center: targetCenter, duration: this.options.shiftDuration };
+      animationTarget = {
+        center: { x: targetCenter.x, y: targetCenter.y - this.state.scrollDelta },
+        duration: this.options.shiftDuration,
+      };
     }
 
     // Animate ghost (or destroy immediately if target is null)
@@ -364,6 +420,7 @@ export class DragEngine {
     this.ghostElement.destroy();
     this.gridTransforms.reset();
     this.slotDetection.reset();
+    this.autoScroller.stop();
 
     // Emit event - React will update state and show original via isDragging prop
     this.events.onDragCancel?.();

@@ -9,6 +9,7 @@ export { PointerTracker } from "./PointerTracker";
 export { GhostElement } from "./GhostElement";
 export { SlotDetection } from "./SlotDetection";
 export { GridTransforms, isItemShifted, effectiveSlot } from "./GridTransforms";
+export { AutoScroller } from "./AutoScroller";
 
 // Utilities
 export { isPointOutsideRect } from "./types";

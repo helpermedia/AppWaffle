@@ -9,6 +9,7 @@ Wafflepad is a modern, customizable app launcher built with Tauri, React and Typ
 - Full-screen app launcher with vibrancy blur effect
 - Type-to-search with ranked matches, including apps inside folders
 - Drag-and-drop reordering with macOS Launchpad-style behavior
+- Edge auto-scroll while dragging near the top or bottom of the grid
 - Folder support: drag apps together to create, drag out to remove
 - Seamless drag handoff from folder modal to main grid
 - Drag an app onto the Dock to pin it, like the original Launchpad
