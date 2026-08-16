@@ -38,8 +38,14 @@ export function useGrid() {
     },
     onDragMove(info: DragMoveInfo) {
       // Dock handoff first: once the pointer is in the Dock zone the
-      // gesture goes native and folder-creation logic must stand down
-      if (dockDrag.handleDragMove(info)) return;
+      // gesture goes native and folder-creation logic must stand down.
+      // Standing down includes disarming it: a drop-target ring armed just
+      // before entering the zone must not survive into a release here —
+      // a stale match would create a folder on an aborted Dock drag.
+      if (dockDrag.handleDragMove(info)) {
+        handleFolderDragCancel();
+        return;
+      }
       handleFolderDragMove(info);
     },
     onDragEnd(info: DragEndInfo, reorder: () => void, complete: () => void) {

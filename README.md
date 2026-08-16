@@ -58,6 +58,8 @@ This is harmless and the app still gets pinned. Wafflepad only hands the drag ov
 
 Wafflepad never modifies other apps and does not need the permission. If the notification bothers you, you can enable Wafflepad under **System Settings → Privacy & Security → App Management** — but be aware that this grants it the right to update or delete other applications, which it does not need.
 
+A Dock drag is also one-way: after a short dwell over the Dock, the gesture is handed to macOS, and Wafflepad cannot take it back mid-drag. If you change your mind, release anywhere (or press Escape) — the drag image dissolves and the app is still in the grid, exactly where it was. Grazing the Dock briefly while dragging near the bottom edge does not hand off.
+
 ## License
 
 MIT
