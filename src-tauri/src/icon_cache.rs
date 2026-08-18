@@ -53,7 +53,9 @@ import Cocoa
 import Foundation
 
 guard CommandLine.arguments.count > 1 else { exit(1) }
-let path = CommandLine.arguments[1]
+// Resolve symlinks first: system apps like Safari are cryptex symlinks in
+// /Applications, and iconForFile badges a symlink with the alias arrow
+let path = URL(fileURLWithPath: CommandLine.arguments[1]).resolvingSymlinksInPath().path
 let workspace = NSWorkspace.shared
 let icon = workspace.icon(forFile: path)
 icon.size = NSSize(width: 128, height: 128)
