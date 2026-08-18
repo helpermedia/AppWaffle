@@ -5,7 +5,7 @@ use objc2_app_kit::{NSApplication, NSApplicationPresentationOptions, NSScreen, N
 #[cfg(target_os = "macos")]
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 #[cfg(target_os = "macos")]
-use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
 
 /// macOS window level above Dock and menu bar (Launchpad-style).
 /// Corresponds to kCGPopUpMenuWindowLevelKey (private API).
@@ -16,8 +16,16 @@ const LAUNCHPAD_WINDOW_LEVEL: isize = 19;
 pub(crate) fn setup_window(window: &tauri::WebviewWindow) {
     let mtm = MainThreadMarker::new().expect("Must be on main thread");
 
-    apply_vibrancy(window, NSVisualEffectMaterial::HudWindow, None, None)
-        .expect("Failed to apply vibrancy");
+    // Pin the material to its active look: the default follows window
+    // activation, which turns the blur solid while the launcher stays
+    // open beneath the Quick Look helper's panel
+    apply_vibrancy(
+        window,
+        NSVisualEffectMaterial::HudWindow,
+        Some(NSVisualEffectState::Active),
+        None,
+    )
+    .expect("Failed to apply vibrancy");
 
     let app = NSApplication::sharedApplication(mtm);
     app.setPresentationOptions(NSApplicationPresentationOptions::AutoHideMenuBar);

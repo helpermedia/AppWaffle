@@ -3,6 +3,9 @@
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
     Roboto, Helvetica, Arial, sans-serif;
+  /* The user's macOS accent color (System Settings, Appearance), resolved
+     by WebKit's AccentColor system keyword */
+  --color-accent: AccentColor;
   --animate-fade-in: fade-in 0.2s ease-out;
   --animate-fade-in-delayed: fade-in 0.2s ease-out 50ms forwards;
   --animate-fade-out: fade-out 0.2s ease-out forwards;

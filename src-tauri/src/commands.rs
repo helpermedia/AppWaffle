@@ -1,6 +1,6 @@
 use rayon::prelude::*;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use crate::app_discovery::{app_category, discover_apps_and_folders, get_applications_dirs};
 use crate::config::{
@@ -66,7 +66,7 @@ pub(crate) fn update_order(
 #[tauri::command]
 pub(crate) async fn get_app_icon(path: String) -> Option<String> {
     let path_buf = PathBuf::from(&path);
-    if !path_buf.is_absolute() || !path_buf.extension().map_or(false, |ext| ext == "app") {
+    if !path_buf.is_absolute() || path_buf.extension().is_none_or(|ext| ext != "app") {
         return None;
     }
 
@@ -152,24 +152,162 @@ pub(crate) async fn get_apps(app: tauri::AppHandle) -> Result<AppsResponse, AppE
     Ok(AppsResponse { apps, folders })
 }
 
-#[tauri::command]
-pub(crate) async fn launch_app(path: String) -> Result<(), AppError> {
-    let path_buf = PathBuf::from(&path);
+/// Validate that a path is an .app bundle inside an allowed applications
+/// directory — shared by all per-app actions. Deliberately does NOT
+/// canonicalize: system apps like Safari are cryptex symlinks in
+/// /Applications whose resolved target (/System/Volumes/Preboot/…) is
+/// outside every allowed directory. Traversal is rejected lexically
+/// instead, and the bundle must exist.
+pub(crate) fn validated_app_path(path: &str) -> Result<PathBuf, AppError> {
+    let path_buf = PathBuf::from(path);
 
-    let canonical = path_buf.canonicalize()?;
-
-    if !canonical.extension().map_or(false, |ext| ext == "app") {
+    let lexically_clean = path_buf.is_absolute()
+        && path_buf.components().all(|component| {
+            matches!(
+                component,
+                std::path::Component::RootDir | std::path::Component::Normal(_)
+            )
+        });
+    if !lexically_clean || path_buf.extension().is_none_or(|ext| ext != "app") {
         return Err(AppError::Validation("Invalid app path".into()));
     }
 
     let allowed = get_applications_dirs();
-    if !allowed.iter().any(|dir| canonical.starts_with(dir)) {
+    if !allowed.iter().any(|dir| path_buf.starts_with(dir)) {
         return Err(AppError::Validation("App not in allowed directory".into()));
     }
 
-    Command::new("open").arg(canonical).spawn()?;
+    if !path_buf.exists() {
+        return Err(AppError::Validation("App does not exist".into()));
+    }
+
+    Ok(path_buf)
+}
+
+#[tauri::command]
+pub(crate) async fn launch_app(path: String) -> Result<(), AppError> {
+    let validated = validated_app_path(&path)?;
+    Command::new("open").arg(validated).spawn()?;
+    Ok(())
+}
+
+/// Reveal the app bundle in Finder (context menu "Show in Finder").
+/// Calls NSWorkspace directly: `open -R` reaches Finder via Apple Events
+/// (Automation consent prompt), and the opener plugin canonicalizes first,
+/// which would reveal cryptex-symlinked apps like Safari in the cryptex
+/// directory instead of /Applications. Sync command: runs on the main
+/// thread, which AppKit requires.
+#[tauri::command]
+pub(crate) fn reveal_app(path: String) -> Result<(), AppError> {
+    let validated = validated_app_path(&path)?;
+
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSWorkspace;
+        use objc2_foundation::{NSArray, NSString, NSURL};
+
+        let url = NSURL::fileURLWithPath(&NSString::from_str(&validated.to_string_lossy()));
+        let urls = NSArray::from_retained_slice(&[url]);
+        NSWorkspace::sharedWorkspace().activateFileViewerSelectingURLs(&urls);
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = validated;
+        Err(AppError::Validation("Reveal is only available on macOS".into()))
+    }
+}
+
+/// Open Finder's Get Info panel for the app (context menu "Get Info").
+/// Finder exposes no CLI/API for this, so it goes through AppleScript;
+/// the path travels as argv rather than being spliced into the script.
+/// First use triggers the macOS Automation consent prompt (→ Finder).
+#[tauri::command]
+pub(crate) async fn show_get_info(path: String) -> Result<(), AppError> {
+    let validated = validated_app_path(&path)?;
+    Command::new("osascript")
+        .args([
+            "-e", "on run argv",
+            "-e", "tell application \"Finder\"",
+            "-e", "activate",
+            "-e", "open information window of (POSIX file (item 1 of argv) as alias)",
+            "-e", "end tell",
+            "-e", "end run",
+        ])
+        .arg(validated)
+        .spawn()?;
+    Ok(())
+}
+
+/// Show a Quick Look preview of the app bundle (context menu "Quick Look").
+/// A helper process (helpers/quick-look.swift, compiled by build.rs and
+/// bundled beside the app binary) presents a real QLPreviewPanel; the path
+/// travels as argv.
+///
+/// The launcher stays open beneath the panel (PREVIEW_COUNT suppresses the
+/// focus-loss quit; the panel floats at level 20, one above the launcher).
+/// The helper exits when its panel closes or another app takes focus; the
+/// watcher thread then quits the launcher unless focus returned to it.
+#[tauri::command]
+pub(crate) async fn quick_look(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    path: String,
+) -> Result<(), AppError> {
+    let validated = validated_app_path(&path)?;
+
+    let mut child = Command::new(quick_look_helper_path()?)
+        .arg(validated)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+
+    crate::PREVIEW_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+    std::thread::spawn(move || {
+        let _ = child.wait();
+        crate::PREVIEW_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        // Give macOS a moment to hand focus back after the helper exits;
+        // if it went elsewhere instead, close like any other focus loss.
+        // Skipped while another preview is still up, or when a click into
+        // the launcher already owns the quit (launching a clicked app, or
+        // closing via background click set IS_LAUNCHING) — deferring keeps
+        // the launch animation from being cut short.
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        if crate::PREVIEW_COUNT.load(std::sync::atomic::Ordering::SeqCst) == 0
+            && !window.is_focused().unwrap_or(false)
+            && !crate::IS_LAUNCHING.swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            crate::graceful_exit(&app);
+        }
+    });
 
     Ok(())
+}
+
+/// Resolve the bundled Quick Look helper binary. The tauri CLI copies
+/// externalBin beside the app binary for both `tauri dev` and bundled
+/// builds; the triple-suffixed build output in src-tauri/binaries is the
+/// fallback for bare `cargo run`-style dev launches.
+fn quick_look_helper_path() -> Result<PathBuf, AppError> {
+    let exe = std::env::current_exe()?;
+    if let Some(dir) = exe.parent() {
+        let helper = dir.join("quick-look-helper");
+        if helper.exists() {
+            return Ok(helper);
+        }
+    }
+
+    let triple = option_env!("WAFFLEPAD_TARGET_TRIPLE").unwrap_or("unknown");
+    let fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("binaries")
+        .join(format!("quick-look-helper-{triple}"));
+    if fallback.exists() {
+        return Ok(fallback);
+    }
+
+    Err(AppError::Validation("Quick Look helper not found".into()))
 }
 
 #[tauri::command]

@@ -202,6 +202,7 @@ export function Wafflepad() {
           onRename={(newName) => handleRenameFolder(openFolder.id, newName)}
           onClose={onCloseFolder}
           onLaunch={handleLaunch}
+          onCloseApp={closeApp}
           launchingPath={launchingPath}
           coordinator={coordinator}
         />
@@ -230,6 +231,7 @@ export function Wafflepad() {
                   isDragging={false}
                   isSelected={selectedId === app.id}
                   onLaunch={handleLaunch}
+                  onCloseApp={closeApp}
                   isLaunching={launchingPath === app.path}
                 />
               ))}
@@ -262,6 +264,7 @@ export function Wafflepad() {
                     dropAction={dropAction}
                     isSelected={selectedId === item.data.id}
                     onLaunch={handleLaunch}
+                    onCloseApp={closeApp}
                     isLaunching={launchingPath === item.data.path}
                   />
                 );

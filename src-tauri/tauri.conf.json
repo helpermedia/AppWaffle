@@ -22,7 +22,8 @@
         "skipTaskbar": true,
         "resizable": false,
         "visible": false,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "acceptFirstMouse": true
       }
     ],
     "security": {
@@ -36,6 +37,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": ["binaries/quick-look-helper"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

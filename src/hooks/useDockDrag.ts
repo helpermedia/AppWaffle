@@ -39,6 +39,9 @@ function pointInZone(point: Point, zone: DockZone): boolean {
  */
 const HANDOFF_DWELL_MS = 150;
 
+/** How soon a rejected handoff retries when no move event does it first */
+const HANDOFF_RETRY_MS = 150;
+
 /**
  * Launchpad-style "drop an app onto the Dock".
  *
@@ -135,6 +138,18 @@ export function useDockDrag({ getEngine, isPinnable }: UseDockDragOptions) {
         console.warn("useDockDrag: native drag did not start", error);
         if (ghost) ghost.style.visibility = "";
         gestureRef.current.handedOff = false;
+        // A perfectly still pointer — the gesture the dwell exists for —
+        // generates no further move events, so a rejected attempt must
+        // re-arm itself; whichever of the timer or the next move comes
+        // first retries.
+        if (gestureRef.current.inZone && dwellTimerRef.current === null) {
+          dwellTimerRef.current = window.setTimeout(() => {
+            dwellTimerRef.current = null;
+            const current = gestureRef.current;
+            if (!current.inZone || current.handedOff) return;
+            attemptHandoff();
+          }, HANDOFF_RETRY_MS);
+        }
       });
   }
 

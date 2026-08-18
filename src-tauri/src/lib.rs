@@ -1,4 +1,5 @@
 mod app_discovery;
+mod app_menu;
 mod commands;
 mod config;
 mod dock_drag;
@@ -37,6 +38,15 @@ pub(crate) static IS_LAUNCHING: std::sync::atomic::AtomicBool =
 /// dock_drag re-checks focus when the session ends.
 pub(crate) static IS_DOCK_DRAGGING: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
+
+/// Count of live Quick Look previews. While non-zero, focus loss must not
+/// quit the launcher: a preview panel (helper process) owns focus and the
+/// launcher stays open beneath it. A count rather than a flag so
+/// overlapping previews don't clobber each other's suppression; the
+/// quick_look watcher decides what happens when a helper exits
+/// (commands.rs).
+pub(crate) static PREVIEW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 
 /// Save order state to disk and exit
 pub(crate) fn graceful_exit(app: &tauri::AppHandle) {
@@ -90,6 +100,9 @@ pub fn run() {
             commands::get_apps,
             commands::get_app_icon,
             commands::launch_app,
+            commands::reveal_app,
+            commands::show_get_info,
+            commands::quick_look,
             commands::show_window,
             commands::load_config,
             commands::update_order,
@@ -97,6 +110,7 @@ pub fn run() {
             commands::quit_after_delay,
             dock_drag::get_dock_drag_zone,
             dock_drag::start_dock_drag,
+            app_menu::show_app_menu,
         ])
         .on_menu_event(|app, event| {
             if event.id() == "quit" {
@@ -109,6 +123,7 @@ pub fn run() {
                 // or while a Dock drag session is in flight
                 if IS_LAUNCHING.load(std::sync::atomic::Ordering::SeqCst)
                     || IS_DOCK_DRAGGING.load(std::sync::atomic::Ordering::SeqCst)
+                    || PREVIEW_COUNT.load(std::sync::atomic::Ordering::SeqCst) > 0
                 {
                     return;
                 }

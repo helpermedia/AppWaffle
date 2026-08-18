@@ -58,19 +58,13 @@ pub(crate) fn start_dock_drag(
     app_path: String,
     ghost_rect: Option<GhostRect>,
 ) -> Result<(), AppError> {
-    // Same validation as launch_app: only real app bundles from the
-    // discovered application directories can leave the window.
-    let canonical = std::path::PathBuf::from(&app_path).canonicalize()?;
-    if !canonical.extension().map_or(false, |ext| ext == "app") {
-        return Err(AppError::Validation("Invalid app path".into()));
-    }
-    let allowed = crate::app_discovery::get_applications_dirs();
-    if !allowed.iter().any(|dir| canonical.starts_with(dir)) {
-        return Err(AppError::Validation("App not in allowed directory".into()));
-    }
+    // Same validation as launch_app and the context-menu actions: only
+    // real app bundles from the discovered application directories can
+    // leave the window.
+    let validated = crate::commands::validated_app_path(&app_path)?;
 
     #[cfg(target_os = "macos")]
-    return macos::start(&window, &canonical.to_string_lossy(), ghost_rect);
+    return macos::start(&window, &validated.to_string_lossy(), ghost_rect);
 
     #[cfg(not(target_os = "macos"))]
     {
@@ -369,7 +363,7 @@ mod macos {
             let is_dock = dict
                 .find(CFString::from_static_string("kCGWindowOwnerName"))
                 .and_then(|value| value.downcast::<CFString>())
-                .map_or(false, |owner| owner.to_string() == "Dock");
+                .is_some_and(|owner| owner == "Dock");
             // The Dock process also draws desktop wallpaper windows at
             // negative layers; only positive layers are the Dock itself.
             let layer = dict
@@ -456,7 +450,7 @@ mod macos {
         let y1 = a.y.max(b.y);
         let x2 = (a.x + a.width).min(b.x + b.width);
         let y2 = (a.y + a.height).min(b.y + b.height);
-        (x2 > x1 && y2 > y1).then(|| Rect {
+        (x2 > x1 && y2 > y1).then_some(Rect {
             x: x1,
             y: y1,
             width: x2 - x1,

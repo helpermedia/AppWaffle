@@ -67,7 +67,7 @@ pub(crate) fn app_category(_path: &str) -> Option<String> {
 fn own_bundle_path() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     exe.ancestors()
-        .find(|p| p.extension().map_or(false, |ext| ext == "app"))
+        .find(|p| p.extension().is_some_and(|ext| ext == "app"))
         .map(|p| p.to_path_buf())
 }
 
@@ -100,7 +100,7 @@ fn is_own_bundle(
         if !looks_like_self {
             return false;
         }
-        return bundle_identifier(path).as_deref() == Some(own_bundle_id);
+        bundle_identifier(path).as_deref() == Some(own_bundle_id)
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -118,7 +118,7 @@ fn get_apps_in_dir(
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "app")
+            if path.extension().is_some_and(|ext| ext == "app")
                 && !is_own_bundle(&path, own_bundle_id, own_app_path)
             {
                 apps.push(path);
@@ -141,7 +141,7 @@ pub(crate) fn discover_apps_and_folders(
         if let Ok(entries) = fs::read_dir(&dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map_or(false, |ext| ext == "app") {
+                if path.extension().is_some_and(|ext| ext == "app") {
                     if !is_own_bundle(&path, own_bundle_id, own_app_path) {
                         apps.push(path);
                     }

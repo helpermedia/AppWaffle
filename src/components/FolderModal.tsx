@@ -21,6 +21,8 @@ interface FolderModalProps {
   onRename?: (newName: string) => void;
   onClose: () => void;
   onLaunch?: (path: string) => void;
+  /** Closes the launcher after a context menu action hands off to another app */
+  onCloseApp?: () => void;
   launchingPath?: string | null;
   /** Coordinator for seamless drag handoff to main grid */
   coordinator?: DragCoordinator | null;
@@ -34,6 +36,7 @@ export function FolderModal({
   onRename,
   onClose,
   onLaunch,
+  onCloseApp,
   launchingPath,
   coordinator,
 }: FolderModalProps) {
@@ -235,6 +238,7 @@ export function FolderModal({
               isDragging={activeId === item.id}
               isSelected={selectedId === item.id}
               onLaunch={onLaunch}
+              onCloseApp={onCloseApp}
               isLaunching={launchingPath === item.path}
             />
           ))}

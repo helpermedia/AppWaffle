@@ -7,6 +7,7 @@ interface ContainerProps {
   style?: CSSProperties;
   ref?: Ref<HTMLDivElement>;
   onClick?: MouseEventHandler<HTMLDivElement>;
+  onContextMenu?: MouseEventHandler<HTMLDivElement>;
   "data-draggable"?: boolean;
   "data-id"?: string;
 }
@@ -17,6 +18,7 @@ export function Container({
   style,
   ref,
   onClick,
+  onContextMenu,
   "data-draggable": dataDraggable,
   "data-id": dataId,
 }: ContainerProps) {
@@ -25,6 +27,7 @@ export function Container({
       ref={ref}
       style={style}
       onClick={onClick}
+      onContextMenu={onContextMenu}
       data-grid-item
       data-draggable={dataDraggable}
       data-id={dataId}
