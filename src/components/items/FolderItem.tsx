@@ -13,10 +13,20 @@ export interface GridFolder {
 }
 
 export function FolderPreview({ apps }: { apps: AppInfo[] }) {
-  const previewApps = apps.slice(0, 4);
+  // Density follows the folder size: 2x2 up to four apps, 3x3 up to
+  // nine, 4x4 beyond (anything past sixteen isn't represented)
+  const columns = apps.length <= 4 ? 2 : apps.length <= 9 ? 3 : 4;
+  const previewApps = apps.slice(0, columns * columns);
 
   return (
-    <div className="w-24 h-24 bg-white/20 rounded-2xl p-2 grid grid-cols-2 grid-rows-2 gap-1 border border-white/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
+    <div
+      className={cn(
+        "w-24 h-24 bg-white/20 rounded-2xl p-2 grid gap-1 border border-white/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]",
+        columns === 2 && "grid-cols-2 grid-rows-2",
+        columns === 3 && "grid-cols-3 grid-rows-3",
+        columns === 4 && "grid-cols-4 grid-rows-4"
+      )}
+    >
       {previewApps.map((app) => (
         <img
           key={app.path}
