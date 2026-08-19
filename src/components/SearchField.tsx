@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 
 interface SearchFieldProps {
   value: string;
@@ -6,6 +6,8 @@ interface SearchFieldProps {
   /** Block edits (e.g. mid-drag) without dropping focus */
   readOnly?: boolean;
   ref?: Ref<HTMLInputElement>;
+  /** Extra controls anchored to the field (e.g. the view-options button) */
+  children?: ReactNode;
 }
 
 /**
@@ -13,7 +15,7 @@ interface SearchFieldProps {
  * [data-search-input] tells useKeyboardNav that arrows/Enter here are grid
  * navigation, and [data-keep-open] excludes clicks from close-on-click-outside.
  */
-export function SearchField({ value, onChange, readOnly, ref }: SearchFieldProps) {
+export function SearchField({ value, onChange, readOnly, ref, children }: SearchFieldProps) {
   return (
     <div data-keep-open className="relative mx-auto mb-10 w-64">
       <svg
@@ -44,6 +46,7 @@ export function SearchField({ value, onChange, readOnly, ref }: SearchFieldProps
         autoComplete="off"
         className="w-full select-text rounded-lg border border-white/20 bg-white/10 py-1.5 pl-9 pr-3 text-sm text-white caret-white outline-none transition-colors placeholder:text-white/50 focus:border-white/40 focus:bg-white/15"
       />
+      {children}
     </div>
   );
 }

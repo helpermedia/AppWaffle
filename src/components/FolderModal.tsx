@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { AppItem } from "@/components/items/AppItem";
+import { IconGrid } from "@/components/ui/IconGrid";
 import { useDragGrid, type DragMoveInfo } from "@/hooks/useDragGrid";
 import { type GridFolder } from "@/components/items/FolderItem";
 import { cn } from "@/utils/cn";
@@ -225,11 +226,7 @@ export function FolderModal({
           isClosing ? "animate-scale-out" : "animate-scale-in"
         )}
       >
-        <div
-          ref={containerRef}
-          className="grid gap-4 place-items-center"
-          style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))` }}
-        >
+        <IconGrid ref={containerRef}>
           {items.map((item) => (
             <AppItem
               key={item.id}
@@ -242,7 +239,7 @@ export function FolderModal({
               isLaunching={launchingPath === item.path}
             />
           ))}
-        </div>
+        </IconGrid>
       </div>
     </div>
   );

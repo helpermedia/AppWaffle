@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useGrid } from "@/hooks/useGrid";
+import { useConfig } from "@/hooks/useConfig";
 import { useCloseAnimation } from "@/hooks/useCloseAnimation";
 import { useDocumentEscape } from "@/hooks/useDocumentEscape";
 import { useKeyboardNav } from "@/hooks/useKeyboardNav";
 import { AppItem } from "@/components/items/AppItem";
 import { FolderItem } from "@/components/items/FolderItem";
 import { FolderModal } from "@/components/FolderModal";
+import { OptionsButton } from "@/components/OptionsButton";
+import { PagedGrid } from "@/components/PagedGrid";
 import { SearchField } from "@/components/SearchField";
+import { IconGrid } from "@/components/ui/IconGrid";
 import { GRID_COLUMNS } from "@/constants/grid";
+import { cn } from "@/utils/cn";
 import { searchApps } from "@/utils/searchUtils";
 
 export function Wafflepad() {
@@ -32,10 +37,12 @@ export function Wafflepad() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const savedScrollTop = useRef(0);
+  const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [launchingPath, setLaunchingPath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const { isClosing, setIsClosing, isClosingRef, triggerClose } = useCloseAnimation();
+  const { layout } = useConfig();
 
   // Searching swaps the grid for a flat, ranked result list (drag disabled
   // there — reordering a filtered view would corrupt the saved order)
@@ -158,6 +165,14 @@ export function Wafflepad() {
   function handleBackgroundClick(e: React.MouseEvent) {
     // Don't close if folder is open, dragging, or clicking on an item
     if (openFolder || isDragging) return;
+    // A press that traveled isn't a click: an attempted tile drag in paged
+    // layout (where tiles are inert) releases as a click on the common
+    // ancestor — the background — and must not quit the launcher.
+    // Consumed on read so a click with no fresh press can't compare
+    // against a stale one.
+    const start = mouseDownPos.current;
+    mouseDownPos.current = null;
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5) return;
     const target = e.target as HTMLElement;
     if (!target.closest("[data-grid-item], [data-keep-open]")) {
       closeApp();
@@ -172,6 +187,7 @@ export function Wafflepad() {
   // drag handles (helper-dnd README) — moot here, as body-level select-none
   // already disables label selection app-wide.
   function handleRootMouseDown(e: React.MouseEvent) {
+    mouseDownPos.current = { x: e.clientX, y: e.clientY };
     const target = e.target as HTMLElement;
     if (target.closest("input, textarea")) return;
     const active = document.activeElement;
@@ -204,24 +220,32 @@ export function Wafflepad() {
           onLaunch={handleLaunch}
           onCloseApp={closeApp}
           launchingPath={launchingPath}
-          coordinator={coordinator}
+          // No drag handoff to the main grid in paged layout: that grid is
+          // display:none there, so a drag-out would land on 0x0 rects and
+          // persist an arbitrary position. In-folder reordering still works.
+          coordinator={layout === "paged" ? null : coordinator}
         />
       )}
 
-      <div className={openFolder ? "hidden" : undefined}>
+      <div
+        className={cn(
+          openFolder && "hidden",
+          // Paged mode fills the viewport: pages size themselves to it
+          !openFolder && layout === "paged" && !searchResults && "h-full flex flex-col"
+        )}
+      >
         <SearchField
           ref={searchInputRef}
           value={query}
           onChange={setQuery}
           readOnly={isDragging}
-        />
+        >
+          <OptionsButton />
+        </SearchField>
 
         {searchResults &&
           (searchResults.length > 0 ? (
-            <div
-              className="grid gap-4 place-items-center max-w-7xl mx-auto"
-              style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))` }}
-            >
+            <IconGrid className="max-w-7xl mx-auto">
               {searchResults.map((app) => (
                 <AppItem
                   key={app.id}
@@ -235,21 +259,17 @@ export function Wafflepad() {
                   isLaunching={launchingPath === app.path}
                 />
               ))}
-            </div>
+            </IconGrid>
           ) : (
             <p data-keep-open className="mt-24 text-center text-2xl text-white/50">
               No Results
             </p>
           ))}
 
-        {/* Kept mounted (hidden) during search so the drag engine's DOM,
-            scroll position and icon state survive the search view */}
-        <div className={searchResults ? "hidden" : undefined}>
-          <div
-            ref={containerRef}
-            className="grid gap-4 place-items-center max-w-7xl mx-auto"
-            style={{ gridTemplateColumns: `repeat(${GRID_COLUMNS}, minmax(0, 1fr))` }}
-          >
+        {/* Kept mounted (hidden) during search and in paged layout so the
+            drag engine's DOM, scroll position and icon state survive */}
+        <div className={searchResults || layout === "paged" ? "hidden" : undefined}>
+          <IconGrid ref={containerRef} className="max-w-7xl mx-auto">
             {items.map((item) => {
               const isDropTarget = dropTarget?.id === item.data.id;
               const dropAction = isDropTarget ? dropTarget.action : undefined;
@@ -282,8 +302,20 @@ export function Wafflepad() {
                 );
               }
             })}
-          </div>
+          </IconGrid>
         </div>
+
+        {layout === "paged" && (
+          <PagedGrid
+            items={items}
+            selectedId={selectedId}
+            launchingPath={launchingPath}
+            hidden={searchResults !== null || openFolder !== null}
+            onLaunch={handleLaunch}
+            onCloseApp={closeApp}
+            onOpenFolder={onOpenFolder}
+          />
+        )}
       </div>
     </div>
   );

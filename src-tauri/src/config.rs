@@ -45,10 +45,51 @@ pub struct OrderConfig {
     pub folders: Vec<FolderMetadata>,
 }
 
+/// How the main grid presents apps.
+/// Deserializes leniently via From<String>: an unrecognized value (e.g.
+/// written by a newer version) falls back to Scroll instead of failing
+/// the whole config parse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase", from = "String")]
+pub enum LayoutMode {
+    #[default]
+    Scroll,
+    Paged,
+}
+
+impl From<String> for LayoutMode {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "paged" => LayoutMode::Paged,
+            _ => LayoutMode::Scroll,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AppSettings {
+    #[serde(default)]
+    pub layout: LayoutMode,
+    /// Settings this build doesn't model (e.g. from a newer version)
+    /// round-trip untouched
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+fn default_version() -> u32 {
+    1
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    #[serde(default = "default_version")]
     pub version: u32,
     pub order: OrderConfig,
+    #[serde(default)]
+    pub settings: AppSettings,
+    /// Top-level keys this build doesn't model round-trip untouched
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for AppConfig {
@@ -56,12 +97,17 @@ impl Default for AppConfig {
         Self {
             version: 1,
             order: OrderConfig::default(),
+            settings: AppSettings::default(),
+            extra: serde_json::Map::new(),
         }
     }
 }
 
-/// In-memory order state - updated on every change, saved to disk only on exit
-pub(crate) static ORDER_STATE: Mutex<Option<OrderConfig>> = Mutex::new(None);
+/// In-memory config snapshot: seeded by load_config, mutated by
+/// update_order/set_layout, written by save_config_to_disk. Holding the
+/// whole parsed config (version and unknown keys included) means saves
+/// never re-read the file and can't regress data this build doesn't model.
+pub(crate) static CONFIG_STATE: Mutex<Option<AppConfig>> = Mutex::new(None);
 
 /// Serializes disk writes so concurrent save_order_to_disk() calls don't interleave
 pub(crate) static SAVE_LOCK: Mutex<()> = Mutex::new(());
@@ -76,28 +122,26 @@ pub(crate) fn get_config_path() -> Option<PathBuf> {
     get_config_dir().map(|p| p.join("config.json"))
 }
 
-/// Save in-memory order state to disk (called on window close)
-pub(crate) fn save_order_to_disk() -> Result<(), AppError> {
+/// Save the in-memory config snapshot to disk (order changes ride the
+/// exit-time call; settings changes save immediately). A no-op until
+/// load_config has seeded the snapshot — a save can never invent a config
+/// or clobber a file it hasn't read.
+pub(crate) fn save_config_to_disk() -> Result<(), AppError> {
     let _save_guard = SAVE_LOCK.lock().unwrap_or_else(|p| p.into_inner());
 
-    // Clone the order and release ORDER_STATE quickly to avoid blocking update_order
-    let order = {
-        let state = ORDER_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        match state.as_ref() {
-            Some(order) => order.clone(),
-            None => return Ok(()), // Nothing to save
-        }
+    // Clone and release the state lock quickly to avoid blocking updates
+    let Some(config) = CONFIG_STATE
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone()
+    else {
+        return Ok(()); // Nothing loaded, nothing to save
     };
 
     let config_dir = get_config_dir()
         .ok_or_else(|| AppError::Validation("Could not determine config directory".into()))?;
 
     fs::create_dir_all(&config_dir)?;
-
-    let config = AppConfig {
-        version: 1,
-        order,
-    };
 
     let config_path = get_config_path()
         .ok_or_else(|| AppError::Validation("Could not determine config path".into()))?;

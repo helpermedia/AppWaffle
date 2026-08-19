@@ -4,24 +4,44 @@ use std::process::{Command, Stdio};
 
 use crate::app_discovery::{app_category, discover_apps_and_folders, get_applications_dirs};
 use crate::config::{
-    get_config_path, AppConfig, AppInfo, AppsResponse, FolderInfo, FolderMetadata, OrderConfig,
-    ORDER_STATE,
+    get_config_path, AppConfig, AppInfo, AppsResponse, FolderInfo, FolderMetadata, LayoutMode,
+    OrderConfig, CONFIG_STATE,
 };
 use crate::icon_cache::{cleanup_orphaned_icons, get_icon_if_cached};
 use crate::AppError;
 
-/// Load app config from disk
+/// Load app config from disk and seed the in-memory snapshot that all
+/// later mutations and saves go through. On parse failure the snapshot
+/// stays empty, so exit-time saves leave the (unreadable) file untouched.
 #[tauri::command]
 pub(crate) async fn load_config() -> Result<AppConfig, AppError> {
     let config_path = get_config_path()
         .ok_or_else(|| AppError::Validation("Could not determine config directory".into()))?;
 
-    if !config_path.exists() {
-        return Ok(AppConfig::default());
-    }
+    let config: AppConfig = if config_path.exists() {
+        let contents = std::fs::read_to_string(&config_path)?;
+        serde_json::from_str(&contents)?
+    } else {
+        AppConfig::default()
+    };
 
-    let contents = std::fs::read_to_string(&config_path)?;
-    Ok(serde_json::from_str(&contents)?)
+    *CONFIG_STATE.lock().unwrap_or_else(|p| p.into_inner()) = Some(config.clone());
+    Ok(config)
+}
+
+/// Persist the layout choice immediately — unlike order (saved on exit),
+/// settings changes are rare and must survive an unclean exit. A field-
+/// level setter, so no other setting can be reset by a partial payload.
+#[tauri::command]
+pub(crate) async fn set_layout(layout: LayoutMode) -> Result<(), AppError> {
+    {
+        let mut state = CONFIG_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(config) = state.as_mut() else {
+            return Err(AppError::Validation("Config not loaded".into()));
+        };
+        config.settings.layout = layout;
+    }
+    crate::config::save_config_to_disk()
 }
 
 /// Update order in memory (called on every change from frontend)
@@ -57,8 +77,11 @@ pub(crate) fn update_order(
         }
     }
 
-    let order = OrderConfig { main, folders };
-    *ORDER_STATE.lock().unwrap_or_else(|p| p.into_inner()) = Some(order);
+    let mut state = CONFIG_STATE.lock().unwrap_or_else(|p| p.into_inner());
+    let Some(config) = state.as_mut() else {
+        return Err(AppError::Validation("Config not loaded".into()));
+    };
+    config.order = OrderConfig { main, folders };
     Ok(())
 }
 

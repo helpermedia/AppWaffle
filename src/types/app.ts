@@ -29,6 +29,13 @@ export interface OrderConfig {
   folders: FolderMetadata[];
 }
 
+/** How the main grid presents apps */
+export type LayoutMode = "scroll" | "paged";
+
+export interface AppSettings {
+  layout: LayoutMode;
+}
+
 export interface DndSettings {
   /** How long to hold over an app before folder creation ring appears (ms) */
   folderCreationDelay: number;
@@ -39,4 +46,5 @@ export interface DndSettings {
 export interface AppConfig {
   version: number;
   order: OrderConfig;
+  settings: AppSettings;
 }

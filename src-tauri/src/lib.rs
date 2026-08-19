@@ -48,10 +48,10 @@ pub(crate) static IS_DOCK_DRAGGING: std::sync::atomic::AtomicBool =
 pub(crate) static PREVIEW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
-/// Save order state to disk and exit
+/// Save config state to disk and exit
 pub(crate) fn graceful_exit(app: &tauri::AppHandle) {
-    if let Err(e) = config::save_order_to_disk() {
-        eprintln!("Failed to save order: {}", e);
+    if let Err(e) = config::save_config_to_disk() {
+        eprintln!("Failed to save config: {}", e);
     }
     app.exit(0);
 }
@@ -106,11 +106,13 @@ pub fn run() {
             commands::show_window,
             commands::load_config,
             commands::update_order,
+            commands::set_layout,
             commands::quit_app,
             commands::quit_after_delay,
             dock_drag::get_dock_drag_zone,
             dock_drag::start_dock_drag,
             app_menu::show_app_menu,
+            app_menu::show_options_menu,
         ])
         .on_menu_event(|app, event| {
             if event.id() == "quit" {
