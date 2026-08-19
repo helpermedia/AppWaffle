@@ -12,6 +12,7 @@ This project has custom skills for in-depth guidance:
 | `/tailwind` | Tailwind CSS v4 best practices, configuration and patterns |
 | `/rust` | Tauri v2 and Rust backend patterns, commands, state, IPC and security |
 | `/commit` | Run lint and build checks, then create a conventional commit |
+| `/diff` | Review uncommitted changes for correctness, hazards and conventions |
 
 Use these skills for detailed code examples and comprehensive guidance.
 
@@ -22,7 +23,7 @@ Wafflepad is a macOS Launchpad alternative built with Tauri, React 19 and TypeSc
 ## Tech Stack
 
 - **Frontend**: React 19, TypeScript, Tailwind CSS v4, Vite 8
-- **Drag & Drop**: Custom implementation (src/lib/dnd) - center-crossing detection, direct DOM manipulation
+- **Drag & Drop**: Custom implementation (src/lib/helper-dnd) - center-crossing detection, direct DOM manipulation
 - **Backend**: Rust, Tauri v2
 - **Package Manager**: Bun
 - **Icons**: NSWorkspace API (via Tauri)
@@ -33,7 +34,7 @@ Wafflepad is a macOS Launchpad alternative built with Tauri, React 19 and TypeSc
 src/
 ├── components/     # React components
 ├── hooks/          # Custom React hooks (useApps, useDragGrid, etc.)
-├── lib/dnd/        # Custom drag-and-drop engine
+├── lib/helper-dnd/ # Custom drag-and-drop engine
 ├── types/          # TypeScript type definitions
 ├── utils/          # Utility functions
 ├── main.tsx        # App entry point
