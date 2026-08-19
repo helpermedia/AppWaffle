@@ -110,6 +110,14 @@ export function useGrid() {
     onAddToFolder: folderOps.handleAddToFolder,
   });
 
+  /** Commit an externally-built main order (paged-layout reorders): the
+   *  master order state lives in the main grid's hook even while the paged
+   *  view renders it, so pages splice their slice back through here. */
+  function handleMainOrderChange(newOrder: string[]) {
+    dragGrid.setOrder(newOrder);
+    saveOrder(newOrder, folders);
+  }
+
   // The open folder is fully derived: openFolderId + folders + appsMap are
   // the sources of truth, so icon loads, renames and content changes are
   // always live. When the folder is dissolved this becomes null in the
@@ -152,6 +160,9 @@ export function useGrid() {
 
     // Coordinator for folder handoff
     coordinator,
+
+    // Order commit for the paged layout
+    handleMainOrderChange,
 
     // Folder handlers
     handleOpenFolder: folderOps.handleOpenFolder,

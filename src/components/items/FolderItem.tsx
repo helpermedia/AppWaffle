@@ -60,7 +60,6 @@ export function FolderItem({
   dropAction,
   onOpen,
   isSelected,
-  draggable = true,
 }: {
   item: GridFolder;
   isDragActive: boolean;
@@ -69,8 +68,6 @@ export function FolderItem({
   onOpen: (folder: GridFolder) => void;
   /** Keyboard-selection highlight */
   isSelected?: boolean;
-  /** Set false to render as a plain tile (paged layout has no reordering) */
-  draggable?: boolean;
 }) {
   const handleClick = () => {
     // Only open if no drag is in progress (same guard as AppItem)
@@ -81,7 +78,7 @@ export function FolderItem({
 
   return (
     <Container
-      data-draggable={draggable ? true : undefined}
+      data-draggable
       data-id={item.id}
       className={cn(
         "relative",

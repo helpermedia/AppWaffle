@@ -1,6 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DragEngine, isPointOutsideRect, effectiveSlot } from "@/lib/helper-dnd";
-import type { GridItem, DragState, Rect, Point, DropAnimationTarget } from "@/lib/helper-dnd";
+import type {
+  GridItem,
+  DragState,
+  DragOptions,
+  Rect,
+  Point,
+  DropAnimationTarget,
+} from "@/lib/helper-dnd";
 import { useLatestRef } from "@/hooks/useLatestRef";
 
 /** Overlap information for folder creation */
@@ -57,6 +64,8 @@ export interface DropAnimationInfo {
 interface UseDragGridOptions {
   /** Initial order (null means not yet loaded) */
   initialOrder: string[] | null;
+  /** Engine construction options; read once when the engine mounts */
+  engineOptions?: DragOptions;
   /** Called when order changes (reorder completed) */
   onOrderChange?: (newOrder: string[]) => void;
   /** Called when a drag gesture activates, before its first move */
@@ -197,6 +206,7 @@ function arrayMove<T>(array: T[], fromIndex: number, toIndex: number): T[] {
 
 export function useDragGrid({
   initialOrder,
+  engineOptions,
   onOrderChange,
   onDragStart,
   onDragMove,
@@ -218,6 +228,7 @@ export function useDragGrid({
   const cancelDrag = () => engineRef.current?.cancelDrag();
 
   // Keep refs for callbacks to avoid stale closures
+  const engineOptionsRef = useLatestRef(engineOptions);
   const orderRef = useLatestRef(order);
   const onOrderChangeRef = useLatestRef(onOrderChange);
   const onDragStartRef = useLatestRef(onDragStart);
@@ -233,7 +244,7 @@ export function useDragGrid({
     const container = containerRef.current;
     if (!container) return;
 
-    const engine = new DragEngine(container);
+    const engine = new DragEngine(container, engineOptionsRef.current);
 
     engine.on("onDragStart", (item: GridItem) => {
       setIsDragging(true);
@@ -318,6 +329,9 @@ export function useDragGrid({
         setIsDragging(false);
         setActiveId(null);
         setActiveIndex(null);
+        // Degenerate end (cached items gone): every terminal path must
+        // reach an external callback, or host drag state leaks
+        onDragCancelRef.current?.();
         return;
       }
 
@@ -411,7 +425,7 @@ export function useDragGrid({
       engine.destroy();
       engineRef.current = null;
     };
-  }, [orderRef, onOrderChangeRef, onDragStartRef, onDragMoveRef, onDragEndRef, onDragCancelRef, getDropAnimationTargetRef, onDragOutsideRef, onDragExitRef]);
+  }, [engineOptionsRef, orderRef, onOrderChangeRef, onDragStartRef, onDragMoveRef, onDragEndRef, onDragCancelRef, getDropAnimationTargetRef, onDragOutsideRef, onDragExitRef]);
 
   // Track previous dragging state to detect when drag ends
   const wasDraggingRef = useRef(false);

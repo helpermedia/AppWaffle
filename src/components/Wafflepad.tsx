@@ -9,7 +9,7 @@ import { AppItem } from "@/components/items/AppItem";
 import { FolderItem } from "@/components/items/FolderItem";
 import { FolderModal } from "@/components/FolderModal";
 import { OptionsButton } from "@/components/OptionsButton";
-import { PagedGrid } from "@/components/PagedGrid";
+import { PagedGrid, type PagedDragHandle } from "@/components/PagedGrid";
 import { SearchField } from "@/components/SearchField";
 import { IconGrid } from "@/components/ui/IconGrid";
 import { GRID_COLUMNS } from "@/constants/grid";
@@ -28,6 +28,7 @@ export function Wafflepad() {
     cancelDrag,
     dropTarget,
     coordinator,
+    handleMainOrderChange,
     handleOpenFolder,
     handleCloseFolder,
     handleRenameFolder,
@@ -43,6 +44,11 @@ export function Wafflepad() {
   const [query, setQuery] = useState("");
   const { isClosing, setIsClosing, isClosingRef, triggerClose } = useCloseAnimation();
   const { layout } = useConfig();
+
+  // A drag inside a page engine (paged layout); the main grid's isDragging
+  // can't see those, so host guards combine both
+  const [pagedDrag, setPagedDrag] = useState<PagedDragHandle | null>(null);
+  const anyDragging = isDragging || pagedDrag !== null;
 
   // Searching swaps the grid for a flat, ranked result list (drag disabled
   // there — reordering a filtered view would corrupt the saved order)
@@ -112,7 +118,7 @@ export function Wafflepad() {
   const { selectedId } = useKeyboardNav({
     ids: navigableIds,
     columns: GRID_COLUMNS,
-    enabled: !openFolder && !isDragging && !isClosing,
+    enabled: !openFolder && !anyDragging && !isClosing,
     autoSelectFirst: searchResults !== null,
     resetKey: searchQuery,
     onActivate: handleActivate,
@@ -150,8 +156,9 @@ export function Wafflepad() {
   // whitespace-only input shows the normal grid and must not eat a press.
   useDocumentEscape(() => {
     if (openFolder || coordinator.isHandoffInProgress()) return;
-    if (isDragging) {
+    if (anyDragging) {
       cancelDrag();
+      pagedDrag?.cancel();
       return;
     }
     if (searchQuery) {
@@ -164,12 +171,11 @@ export function Wafflepad() {
   // Close on click outside (empty space)
   function handleBackgroundClick(e: React.MouseEvent) {
     // Don't close if folder is open, dragging, or clicking on an item
-    if (openFolder || isDragging) return;
-    // A press that traveled isn't a click: an attempted tile drag in paged
-    // layout (where tiles are inert) releases as a click on the common
-    // ancestor — the background — and must not quit the launcher.
-    // Consumed on read so a click with no fresh press can't compare
-    // against a stale one.
+    if (openFolder || anyDragging) return;
+    // A press that traveled isn't a click: a drag can release as a click
+    // on the common ancestor of press and release — the background — and
+    // must not quit the launcher. Consumed on read so a click with no
+    // fresh press can't compare against a stale one.
     const start = mouseDownPos.current;
     mouseDownPos.current = null;
     if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5) return;
@@ -238,7 +244,7 @@ export function Wafflepad() {
           ref={searchInputRef}
           value={query}
           onChange={setQuery}
-          readOnly={isDragging}
+          readOnly={anyDragging}
         >
           <OptionsButton />
         </SearchField>
@@ -314,6 +320,8 @@ export function Wafflepad() {
             onLaunch={handleLaunch}
             onCloseApp={closeApp}
             onOpenFolder={onOpenFolder}
+            onOrderChange={handleMainOrderChange}
+            onDragStateChange={setPagedDrag}
           />
         )}
       </div>
