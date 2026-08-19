@@ -1,13 +1,16 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-// Subtle animated placeholder matching Tahoe's icon background gray
+// Skeleton placeholder while an icon generates: a faint pulsing squircle
+// on the real icons' footprint (icons keep a ~9px transparent margin at
+// 96px with a ~20px corner, measured from the cached icon PNGs), so the
+// artwork lands exactly on top of it instead of replacing a larger block
 export const DEFAULT_ICON = `data:image/svg+xml,${encodeURIComponent(`
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
     <style>
-      @keyframes pulse { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
+      @keyframes pulse { 0%, 100% { opacity: 0.14; } 50% { opacity: 0.26; } }
       rect { animation: pulse 2s ease-in-out infinite; }
     </style>
-    <rect width="100" height="100" rx="22" fill="#bbb"/>
+    <rect x="9" y="9" width="78" height="78" rx="20" fill="#fff"/>
   </svg>
 `)}`;
 
