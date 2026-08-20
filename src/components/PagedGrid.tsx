@@ -4,16 +4,20 @@ import { FolderItem, type GridFolder } from "@/components/items/FolderItem";
 import { IconGrid } from "@/components/ui/IconGrid";
 import { useDragGrid, type DragMoveInfo } from "@/hooks/useDragGrid";
 import { useLatestRef } from "@/hooks/useLatestRef";
-import { GRID_COLUMNS, GRID_GAP, TILE_HEIGHT } from "@/constants/grid";
+import { GRID_COLUMNS, GRID_GAP, TILE_HEIGHT, pageGridId } from "@/constants/grid";
 import { cn } from "@/utils/cn";
 import { watchPointerRelease } from "@/lib/helper-dnd";
-import type { DragEngine, Point } from "@/lib/helper-dnd";
-import type { GridItemUnion } from "@/hooks/useGrid";
+import type { DragCoordinator, DragEngine, Point } from "@/lib/helper-dnd";
+import type { GridItemUnion, PageDragHandlers } from "@/hooks/useGrid";
+import type { PagedFolderInsert } from "@/hooks/useDragHandoff";
+import type { DropAction } from "@/hooks/useFolderCreation";
 
-/** An in-progress drag inside one of the pages, for host-level guards */
+/** An in-progress drag inside one of the pages, for host-level guards
+ *  and for routing dock pinning to the engine that owns the gesture */
 export interface PagedDragHandle {
   pageIndex: number;
   cancel: () => void;
+  getEngine: () => DragEngine | null;
 }
 
 /** How a page exposes its engine to the flip machinery */
@@ -69,11 +73,24 @@ interface PagedGridProps {
   onOrderChange: (newOrder: string[]) => void;
   /** Reports the active page drag, null when none (Escape and guards) */
   onDragStateChange: (drag: PagedDragHandle | null) => void;
+  /** Dock handoff, folder creation and drop animation (from useGrid) */
+  dragHandlers: PageDragHandlers;
+  /** Folder-creation ring target (shared with the main grid's logic) */
+  dropTarget: { id: string; action: DropAction } | null;
+  /** Handoff coordinator: the current page registers as the folder
+   *  drag-out target while the paged layout is visible */
+  coordinator: DragCoordinator;
+  /** Registers how a folder drag-out lands in the visible page's window;
+   *  called with null on unmount */
+  registerFolderInsert: (insert: PagedFolderInsert | null) => void;
 }
 
 interface PageProps {
   pageItems: GridItemUnion[];
   pageIndex: number;
+  /** The page at the current scroll position — it alone registers with
+   *  the handoff coordinator, so a folder drag-out targets it */
+  isCurrent: boolean;
   selectedId: string | null;
   launchingPath: string | null;
   onLaunch: (path: string) => void;
@@ -81,12 +98,15 @@ interface PageProps {
   onOpenFolder: (folder: GridFolder) => void;
   onOrderChange: (pageIndex: number, pageIds: string[]) => void;
   onDragStateChange: (pageIndex: number, drag: PagedDragHandle | null) => void;
-  onDragMove: (pageIndex: number, info: DragMoveInfo) => void;
+  onDragMove: (pageIndex: number, info: DragMoveInfo, dockOwned: boolean) => void;
   registerPage: (pageIndex: number, registration: PageRegistration) => void;
   unregisterPage: (pageIndex: number) => void;
   /** Item mid-flip into this render: its tile hides before its engine
    *  adopts the drag, or ghost and tile would both show during the slide */
   pendingDragId: string | null;
+  dragHandlers: PageDragHandlers;
+  dropTarget: { id: string; action: DropAction } | null;
+  coordinator: DragCoordinator;
 }
 
 /**
@@ -102,6 +122,7 @@ interface PageProps {
 function Page({
   pageItems,
   pageIndex,
+  isCurrent,
   selectedId,
   launchingPath,
   onLaunch,
@@ -113,6 +134,9 @@ function Page({
   registerPage,
   unregisterPage,
   pendingDragId,
+  dragHandlers,
+  dropTarget,
+  coordinator,
 }: PageProps) {
   const { containerRef, order, setOrder, activeId, cancelDrag, getEngine } = useDragGrid({
     initialOrder: pageItems.map((item) => item.data.id),
@@ -121,14 +145,27 @@ function Page({
     // can't start moving the paged viewport under a live drag
     engineOptions: { autoScroll: false },
     onOrderChange: (pageIds) => onOrderChange(pageIndex, pageIds),
-    onDragStart: () => onDragStateChange(pageIndex, { pageIndex, cancel: cancelDrag }),
-    onDragMove: (info) => onDragMove(pageIndex, info),
-    onDragEnd: (_info, reorder, complete) => {
-      reorder();
-      complete();
+    onDragStart: () => {
+      dragHandlers.onDragStart();
+      onDragStateChange(pageIndex, { pageIndex, cancel: cancelDrag, getEngine });
+    },
+    onDragMove: (info) => {
+      // Shared behavior first — Dock handoff outranks the flip dwell,
+      // exactly as it outranks folder creation
+      const dockOwned = dragHandlers.onDragMove(info);
+      onDragMove(pageIndex, info, dockOwned);
+    },
+    onDragEnd: (info, reorder, complete) => {
+      dragHandlers.onDragEnd(info, reorder, () => {
+        complete();
+        onDragStateChange(pageIndex, null);
+      });
+    },
+    onDragCancel: () => {
+      dragHandlers.onDragCancel();
       onDragStateChange(pageIndex, null);
     },
-    onDragCancel: () => onDragStateChange(pageIndex, null),
+    getDropAnimationTarget: dragHandlers.getDropAnimationTarget,
   });
 
   // Sync external slice changes into the hook: setState during render
@@ -153,6 +190,22 @@ function Page({
     return () => unregisterPage(pageIndex);
   }, [registerPage, unregisterPage, pageIndex, registrationRef]);
 
+  // Only the current page joins the handoff coordinator, so a folder
+  // drag-out has exactly one candidate target: this page. Its engine
+  // exists before this runs (useDragGrid's effect is registered first).
+  useEffect(() => {
+    if (!isCurrent) return;
+    const engine = registrationRef.current.getEngine();
+    const container = registrationRef.current.getContainer();
+    if (!engine || !container) {
+      console.warn("PagedGrid: current page engine not ready, folder drag-out disabled");
+      return;
+    }
+    const id = pageGridId(pageIndex);
+    coordinator.register({ id, engine, container });
+    return () => coordinator.unregister(id);
+  }, [isCurrent, coordinator, pageIndex, registrationRef]);
+
   // Engine teardown paths (unmount mid-drag, destroy during the drop
   // animation) emit no events — release the host's drag handle on the way
   // out so guards can't wedge on a drag that no longer exists. The owner
@@ -171,13 +224,15 @@ function Page({
 
   return (
     <IconGrid ref={containerRef} className="max-w-7xl mx-auto">
-      {ordered.map((item) =>
-        item.type === "app" ? (
+      {ordered.map((item) => {
+        const dropAction = dropTarget?.id === item.data.id ? dropTarget.action : undefined;
+        return item.type === "app" ? (
           <AppItem
             key={item.data.id}
             item={item.data}
             isDragActive={activeId !== null}
             isDragging={activeId === item.data.id || pendingDragId === item.data.id}
+            dropAction={dropAction}
             isSelected={selectedId === item.data.id}
             onLaunch={onLaunch}
             onCloseApp={onCloseApp}
@@ -189,11 +244,12 @@ function Page({
             item={item.data}
             isDragActive={activeId !== null}
             isDragging={activeId === item.data.id || pendingDragId === item.data.id}
+            dropAction={dropAction}
             isSelected={selectedId === item.data.id}
             onOpen={onOpenFolder}
           />
-        )
-      )}
+        );
+      })}
     </IconGrid>
   );
 }
@@ -201,10 +257,10 @@ function Page({
 /**
  * Launchpad-style paged layout: full-width pages snapped horizontally,
  * holding as many whole rows as the viewport fits. Each page runs its own
- * drag engine; dwelling at a viewport edge mid-drag flips to the adjacent
- * page and hands the gesture off to its engine (detach ghost, cancel
- * source, commit the order move, instant scroll, adopt on the target).
- * Folder creation and drag-to-Dock inside pages are a later increment.
+ * drag engine with the main grid's shared behavior (reorder, folder
+ * creation, Dock pinning); dwelling at a viewport edge mid-drag flips to
+ * the adjacent page and hands the gesture off to its engine, and folder
+ * drag-outs adopt onto the current page via the coordinator.
  */
 export function PagedGrid({
   items,
@@ -216,6 +272,10 @@ export function PagedGrid({
   onOpenFolder,
   onOrderChange,
   onDragStateChange,
+  dragHandlers,
+  dropTarget,
+  coordinator,
+  registerFolderInsert,
 }: PagedGridProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [rows, setRows] = useState(0);
@@ -279,15 +339,17 @@ export function PagedGrid({
   }, [hidden]);
 
   // display:none (search, folder modal) drops scrollLeft to 0 without a
-  // scroll event; restore the active page when visible again
+  // scroll event; restore the active page synchronously on un-hide.
+  // Layout effect, no rAF: a folder drag-out adopts onto the current page
+  // right after the un-hiding commit, and the target engine must cache
+  // item rects with the viewport already restored — an async restore can
+  // lose the race when the scheduler yields under continuous pointer input.
   const wasHiddenRef = useRef(hidden);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (wasHiddenRef.current && !hidden) {
-      requestAnimationFrame(() => {
-        const el = viewportRef.current;
-        // "instant" overrides the viewport's scroll-smooth
-        el?.scrollTo({ left: page * el.clientWidth, behavior: "instant" });
-      });
+      const el = viewportRef.current;
+      // "instant" overrides the viewport's scroll-smooth
+      el?.scrollTo({ left: page * el.clientWidth, behavior: "instant" });
     }
     wasHiddenRef.current = hidden;
   }, [hidden, page]);
@@ -299,6 +361,22 @@ export function PagedGrid({
       pages.push(items.slice(i, i + perPage));
     }
   }
+
+  // A folder drag-out lands at the visible page's last slot: everything
+  // before it stays put and the page's last item cascades onward — the
+  // calm-entry counterpart of the flip's near-edge insertion
+  const folderInsertRef = useLatestRef<PagedFolderInsert>((idsWithoutItem, itemId) => {
+    const insertAt = Math.min((page + 1) * perPage - 1, idsWithoutItem.length);
+    const placed = [...idsWithoutItem];
+    placed.splice(insertAt, 0, itemId);
+    return placed;
+  });
+  useEffect(() => {
+    registerFolderInsert((idsWithoutItem, itemId) =>
+      folderInsertRef.current(idsWithoutItem, itemId)
+    );
+    return () => registerFolderInsert(null);
+  }, [registerFolderInsert, folderInsertRef]);
 
   function releaseHeldDrag() {
     dragOwnerRef.current = null;
@@ -335,11 +413,20 @@ export function PagedGrid({
   }
 
   /** Arm, re-aim or clear the edge dwell for the current drag position */
-  function handlePageDragMove(pageIndex: number, info: DragMoveInfo) {
+  function handlePageDragMove(pageIndex: number, info: DragMoveInfo, dockOwned: boolean) {
     lastPointerRef.current = info.pointer;
     const rect = viewportRectRef.current;
     const flip = flipRef.current;
     if (!rect || flip.inProgress) return;
+
+    // A left/right Dock's zone can overlap the flip zones: once the Dock
+    // owns the gesture, a flip firing mid-handoff would adopt the hidden
+    // ghost into an invisible drag beside the live native session
+    if (dockOwned) {
+      clearFlipDwell();
+      return;
+    }
+
     const direction: -1 | 0 | 1 =
       info.pointer.x < rect.left + FLIP_EDGE_SIZE
         ? -1
@@ -506,6 +593,9 @@ export function PagedGrid({
             <Page
               pageItems={pageItems}
               pageIndex={index}
+              // Clamped: after shrinking while hidden, `page` can exceed
+              // the page count and no page would register for drag-out
+              isCurrent={index === Math.min(page, pages.length - 1)}
               selectedId={selectedId}
               launchingPath={launchingPath}
               onLaunch={onLaunch}
@@ -517,6 +607,9 @@ export function PagedGrid({
               registerPage={pageRegistry.register}
               unregisterPage={pageRegistry.unregister}
               pendingDragId={pendingDragId}
+              dragHandlers={dragHandlers}
+              dropTarget={dropTarget}
+              coordinator={coordinator}
             />
           </div>
         ))}

@@ -29,6 +29,9 @@ export function Wafflepad() {
     dropTarget,
     coordinator,
     handleMainOrderChange,
+    pageDragHandlers,
+    setActivePageEngine,
+    setPagedFolderInsert,
     handleOpenFolder,
     handleCloseFolder,
     handleRenameFolder,
@@ -46,9 +49,15 @@ export function Wafflepad() {
   const { layout } = useConfig();
 
   // A drag inside a page engine (paged layout); the main grid's isDragging
-  // can't see those, so host guards combine both
+  // can't see those, so host guards combine both. The active engine is
+  // also bridged to useGrid so Dock pinning reads the right ghost.
   const [pagedDrag, setPagedDrag] = useState<PagedDragHandle | null>(null);
   const anyDragging = isDragging || pagedDrag !== null;
+
+  function handlePagedDragChange(drag: PagedDragHandle | null) {
+    setPagedDrag(drag);
+    setActivePageEngine(drag ? drag.getEngine : null);
+  }
 
   // Searching swaps the grid for a flat, ranked result list (drag disabled
   // there — reordering a filtered view would corrupt the saved order)
@@ -226,10 +235,7 @@ export function Wafflepad() {
           onLaunch={handleLaunch}
           onCloseApp={closeApp}
           launchingPath={launchingPath}
-          // No drag handoff to the main grid in paged layout: that grid is
-          // display:none there, so a drag-out would land on 0x0 rects and
-          // persist an arbitrary position. In-folder reordering still works.
-          coordinator={layout === "paged" ? null : coordinator}
+          coordinator={coordinator}
         />
       )}
 
@@ -321,7 +327,11 @@ export function Wafflepad() {
             onCloseApp={closeApp}
             onOpenFolder={onOpenFolder}
             onOrderChange={handleMainOrderChange}
-            onDragStateChange={setPagedDrag}
+            onDragStateChange={handlePagedDragChange}
+            dragHandlers={pageDragHandlers}
+            dropTarget={dropTarget}
+            coordinator={coordinator}
+            registerFolderInsert={setPagedFolderInsert}
           />
         )}
       </div>

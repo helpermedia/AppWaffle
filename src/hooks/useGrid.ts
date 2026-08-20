@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { useApps } from "@/hooks/useApps";
 import { useDragGrid } from "@/hooks/useDragGrid";
 import { useFolders } from "@/hooks/useFolders";
@@ -6,15 +7,28 @@ import { useConfig, useDndSettings } from "@/hooks/useConfig";
 import { useGridData } from "@/hooks/useGridData";
 import { useFolderOperations } from "@/hooks/useFolderOperations";
 import { resolveFolderApps } from "@/utils/folderUtils";
-import { useDragHandoff } from "@/hooks/useDragHandoff";
+import { useDragHandoff, type PagedFolderInsert } from "@/hooks/useDragHandoff";
 import { useDockDrag } from "@/hooks/useDockDrag";
 import type { DragMoveInfo, DragEndInfo, DropAnimationInfo } from "@/hooks/useDragGrid";
+import type { DragEngine, DropAnimationTarget } from "@/lib/helper-dnd";
 
 export type { GridItemUnion } from "@/hooks/useGridData";
 
+/** Drag behavior shared between the main grid and the paged layout's
+ *  page engines (dock handoff, folder creation, drop animation) */
+export interface PageDragHandlers {
+  onDragStart: () => void;
+  /** Returns true while the Dock session owns the gesture, so page-level
+   *  behavior (the flip dwell) can stand down with folder creation */
+  onDragMove: (info: DragMoveInfo) => boolean;
+  onDragEnd: (info: DragEndInfo, reorder: () => void, complete: () => void) => void;
+  onDragCancel: () => void;
+  getDropAnimationTarget: (info: DropAnimationInfo) => DropAnimationTarget | null | undefined;
+}
+
 export function useGrid() {
   const { apps, folders: physicalFolders } = useApps();
-  const { orderConfig, saveOrder } = useConfig();
+  const { orderConfig, saveOrder, layout } = useConfig();
 
   // Folders management — seeded from config by useGridData's init pass,
   // then local state is the single source of truth. (A derived fallback to
@@ -25,12 +39,20 @@ export function useGrid() {
   // Get DnD settings for animation control
   const { overlapThreshold } = useDndSettings();
 
-  // Main drag grid hook (declared before sub-hooks that need it)
-  const dragGrid = useDragGrid({
-    initialOrder: null,
-    onOrderChange(newOrder: string[]) {
-      saveOrder(newOrder, folders);
-    },
+  // While a page engine owns the gesture (paged layout), dock pinning must
+  // read the ghost from that engine, not from the hidden main grid's
+  const activePageEngineRef = useRef<(() => DragEngine | null) | null>(null);
+  const [setActivePageEngine] = useState(
+    () =>
+      (getEngine: (() => DragEngine | null) | null) => {
+        activePageEngineRef.current = getEngine;
+      }
+  );
+
+  // Drag behavior shared by the main grid and the paged layout's page
+  // engines. Everything here is id-based and reads its collaborators
+  // lazily, so it works regardless of which engine owns the gesture.
+  const sharedDragHandlers: PageDragHandlers = {
     onDragStart() {
       // A silent teardown path (no end/cancel event) must not leave the
       // previous gesture's handoff state pinned to this item
@@ -44,9 +66,10 @@ export function useGrid() {
       // a stale match would create a folder on an aborted Dock drag.
       if (dockDrag.handleDragMove(info)) {
         handleFolderDragCancel();
-        return;
+        return true;
       }
       handleFolderDragMove(info);
+      return false;
     },
     onDragEnd(info: DragEndInfo, reorder: () => void, complete: () => void) {
       dockDrag.reset();
@@ -67,6 +90,15 @@ export function useGrid() {
       }
       return undefined;
     },
+  };
+
+  // Main drag grid hook (declared before sub-hooks that need it)
+  const dragGrid = useDragGrid({
+    initialOrder: null,
+    onOrderChange(newOrder: string[]) {
+      saveOrder(newOrder, folders);
+    },
+    ...sharedDragHandlers,
   });
 
   // Item building & order initialization
@@ -83,7 +115,7 @@ export function useGrid() {
 
   // Launchpad-style drag-to-Dock pinning
   const dockDrag = useDockDrag({
-    getEngine: dragGrid.getEngine,
+    getEngine: () => activePageEngineRef.current?.() ?? dragGrid.getEngine(),
     isPinnable: (id) => gridData.getItemType(id) === "app",
   });
 
@@ -133,7 +165,21 @@ export function useGrid() {
       }
     : null;
 
-  // Coordinator for drag handoff between folder and main grid
+  // While the paged layout is active, PagedGrid registers how a folder
+  // drag-out lands in the visible page's window (scroll layout: null,
+  // the default append-at-end applies)
+  const pagedFolderInsertRef = useRef<PagedFolderInsert | null>(null);
+  const [setPagedFolderInsert] = useState(
+    () =>
+      (insert: PagedFolderInsert | null) => {
+        pagedFolderInsertRef.current = insert;
+      }
+  );
+
+  // Coordinator for drag handoff out of the folder modal. The main grid
+  // participates only in scroll layout; in paged layout the current page
+  // registers instead (PagedGrid), so a drag-out always has exactly one
+  // candidate target.
   const { coordinator } = useDragHandoff({
     openFolderId: folderOps.openFolderId,
     setOpenFolderId: folderOps.setOpenFolderId,
@@ -141,6 +187,8 @@ export function useGrid() {
     setFolders,
     dragGrid,
     saveOrder,
+    registerMainGrid: layout !== "paged",
+    pagedFolderInsertRef,
   });
 
   return {
@@ -161,8 +209,12 @@ export function useGrid() {
     // Coordinator for folder handoff
     coordinator,
 
-    // Order commit for the paged layout
+    // Paged layout integration: order commit, shared drag behavior, and
+    // the bridges that route dock pinning and folder drag-out to pages
     handleMainOrderChange,
+    pageDragHandlers: sharedDragHandlers,
+    setActivePageEngine,
+    setPagedFolderInsert,
 
     // Folder handlers
     handleOpenFolder: folderOps.handleOpenFolder,

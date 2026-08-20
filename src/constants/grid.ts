@@ -18,3 +18,14 @@ export const TILE_HEIGHT = 160;
  * inline style, and the paged layout uses it for row fitting.
  */
 export const GRID_GAP = 16;
+
+/** Coordinator grid id for a paged-layout page (single source: the
+ *  registration and the handoff routing must never drift apart) */
+export function pageGridId(index: number): string {
+  return `page-${index}`;
+}
+
+/** Whether a coordinator grid id names a paged-layout page */
+export function isPageGridId(id: string): boolean {
+  return id.startsWith("page-");
+}
