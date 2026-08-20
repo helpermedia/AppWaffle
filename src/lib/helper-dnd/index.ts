@@ -12,7 +12,7 @@ export { GridTransforms, isItemShifted, effectiveSlot } from "./GridTransforms";
 export { AutoScroller } from "./AutoScroller";
 
 // Utilities
-export { isPointOutsideRect } from "./types";
+export { isPointOutsideRect, watchPointerRelease } from "./types";
 
 // Types
 export type {

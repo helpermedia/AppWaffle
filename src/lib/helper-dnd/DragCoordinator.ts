@@ -1,5 +1,5 @@
 import type { DragEngine } from "./DragEngine";
-import { isPointOutsideRect, type Point } from "./types";
+import { isPointOutsideRect, watchPointerRelease, type Point } from "./types";
 
 /**
  * Registration info for a grid participating in coordinated drag.
@@ -182,6 +182,7 @@ export class DragCoordinator {
     this.isHandingOff = true;
 
     let ghost: HTMLElement | null = null;
+    let releaseWatch: ReturnType<typeof watchPointerRelease> | null = null;
 
     try {
       // Get the drag state before canceling
@@ -202,6 +203,11 @@ export class DragCoordinator {
       }
 
       console.log("[Handoff] Got ghost, canceling source drag");
+
+      // From here until startDragAt no engine observes the pointer — a
+      // release inside the awaits below must abort the adoption or the
+      // drag could never end
+      releaseWatch = watchPointerRelease();
 
       // Cancel source drag (ghost already detached, won't be destroyed)
       fromGrid.engine.cancel();
@@ -227,9 +233,11 @@ export class DragCoordinator {
         `[data-draggable][data-id="${itemId}"]`
       ) as HTMLElement | null;
 
-      if (!itemElement) {
-        // Item not found in target grid - destroy ghost and abort
-        console.warn(`[Handoff] Item ${itemId} not found in grid ${toGridId}`);
+      if (!itemElement || releaseWatch.wasReleased()) {
+        // Item not found, or the pointer was released while nothing was
+        // listening — the state updates stand, but there is no drag left
+        // to adopt: destroy the ghost and abort
+        console.warn(`[Handoff] Aborted: ${!itemElement ? "item not in target grid" : "pointer released mid-handoff"}`);
         ghost.remove();
         this.isHandingOff = false;
         this.activeGridId = null;
@@ -251,6 +259,8 @@ export class DragCoordinator {
       ghost?.remove();
       this.isHandingOff = false;
       return false;
+    } finally {
+      releaseWatch?.dispose();
     }
   }
 

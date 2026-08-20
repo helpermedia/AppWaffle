@@ -97,6 +97,16 @@ export class DragEngine {
   }
 
   /**
+   * Whether a live pointer gesture currently drives a drag. False once the
+   * pointer is released — including during the drop settle animation, when
+   * getState() is still non-null. Handoffs must check this: adopting a
+   * ghost that is already animating to its slot would corrupt the drop.
+   */
+  isActivelyDragging(): boolean {
+    return this.state !== null && this.pointerTracker.isActivelyDragging();
+  }
+
+  /**
    * Reset transforms on all items.
    * Call from React's useLayoutEffect after reorder to clear transforms
    * synchronously before browser paint.
@@ -243,7 +253,7 @@ export class DragEngine {
     // Only while the pointer is still dragging: after release the drop is
     // committed and settling — cancelling then would revert a completed
     // gesture and arm a click suppressor for a pointer that is already up
-    if (!this.state || !this.pointerTracker.isActivelyDragging()) return;
+    if (!this.isActivelyDragging()) return;
 
     this.pointerTracker.suppressClickOnRelease();
     this.cancel();
@@ -258,7 +268,7 @@ export class DragEngine {
    * suppressor would swallow the user's next real click instead.
    */
   cancelForHandoff(): void {
-    if (!this.state || !this.pointerTracker.isActivelyDragging()) return;
+    if (!this.isActivelyDragging()) return;
 
     this.cancel();
     this.events.onDragCancel?.();

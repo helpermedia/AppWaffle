@@ -70,6 +70,29 @@ export interface DragEvents {
   onDragCancel?: () => void;
 }
 
+/**
+ * Watch for the drag pointer being released while no engine is listening.
+ * During a handoff, the source tracker's document listeners are torn down
+ * and the target's only attach in startDragAt — a release inside that
+ * window would otherwise go unobserved and the adopted drag could never
+ * end. Capture-phase so no handler can stop it first.
+ */
+export function watchPointerRelease(): { wasReleased: () => boolean; dispose: () => void } {
+  let released = false;
+  const onRelease = () => {
+    released = true;
+  };
+  document.addEventListener("pointerup", onRelease, { once: true, capture: true });
+  document.addEventListener("pointercancel", onRelease, { once: true, capture: true });
+  return {
+    wasReleased: () => released,
+    dispose: () => {
+      document.removeEventListener("pointerup", onRelease, true);
+      document.removeEventListener("pointercancel", onRelease, true);
+    },
+  };
+}
+
 /** Check if a point is outside a DOMRect */
 export function isPointOutsideRect(point: Point, rect: DOMRect): boolean {
   return (
