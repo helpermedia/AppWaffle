@@ -6,6 +6,13 @@ import { useDragGrid, type DragMoveInfo } from "@/hooks/useDragGrid";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import { GRID_COLUMNS, GRID_GAP, TILE_HEIGHT, pageGridId } from "@/constants/grid";
 import { cn } from "@/utils/cn";
+import {
+  appendToLastPage,
+  insertIntoPage,
+  normalizePages,
+  pagesEqual,
+  removeFromPages,
+} from "@/utils/pageUtils";
 import { watchPointerRelease } from "@/lib/helper-dnd";
 import type { DragCoordinator, DragEngine, Point } from "@/lib/helper-dnd";
 import type { GridItemUnion, PageDragHandlers } from "@/hooks/useGrid";
@@ -74,8 +81,17 @@ interface PagedGridProps {
   renamingFolderId: string | null;
   onRenameStart: (folder: GridFolder) => void;
   onRenameEnd: (folder: GridFolder, newName: string | null) => void;
-  /** Commit a new master order (a page's reorder spliced into the whole) */
-  onOrderChange: (newOrder: string[]) => void;
+  /** Committed page structure (ids); items resolve the tiles */
+  pages: string[][];
+  /** Commit a new page structure. keepEmpty leaves empty pages in place
+   *  (a live drag keeps the page it emptied, see endDrag) instead of
+   *  retiring them */
+  onPagesChange: (pages: string[][], keepEmpty?: boolean) => void;
+  /** A page's drop reordered it: its new sequence, replacing that page's
+   *  span of the flat order */
+  onPageReorder: (pageIds: string[]) => void;
+  /** A page drag ended: retire the pages it emptied (see endDrag) */
+  onRetireEmptyPages: () => void;
   /** Reports the active page drag, null when none (Escape and guards) */
   onDragStateChange: (drag: PagedDragHandle | null) => void;
   /** Dock handoff, folder creation and drop animation (from useGrid) */
@@ -105,7 +121,7 @@ interface PageProps {
   renamingFolderId: string | null;
   onRenameStart: (folder: GridFolder) => void;
   onRenameEnd: (folder: GridFolder, newName: string | null) => void;
-  onOrderChange: (pageIndex: number, pageIds: string[]) => void;
+  onOrderChange: (pageIds: string[]) => void;
   onDragStateChange: (pageIndex: number, drag: PagedDragHandle | null) => void;
   onDragMove: (pageIndex: number, info: DragMoveInfo, dockOwned: boolean) => void;
   registerPage: (pageIndex: number, registration: PageRegistration) => void;
@@ -123,7 +139,7 @@ interface PageProps {
  * geometry. Reorders splice back into the master order via onOrderChange.
  * Renders from the hook's order (the drag commit path) while item data
  * resolves fresh from props, keeping icon loads live. External slice
- * changes (cross-page moves rippling through the positional windows) are
+ * changes (cross-page moves, overflow cascading between pages) are
  * synced into the hook whenever the id set differs; same-set sequence
  * changes stay owned by the hook, whose order runs ahead of the parent
  * during a local drop commit.
@@ -157,7 +173,7 @@ function Page({
     // which pages don't have) — pinned off so a future AutoScroller change
     // can't start moving the paged viewport under a live drag
     engineOptions: { autoScroll: false },
-    onOrderChange: (pageIds) => onOrderChange(pageIndex, pageIds),
+    onOrderChange,
     onDragStart: () => {
       dragHandlers.onDragStart();
       onDragStateChange(pageIndex, { pageIndex, cancel: cancelDrag, getEngine });
@@ -273,11 +289,14 @@ function Page({
 
 /**
  * Launchpad-style paged layout: full-width pages snapped horizontally,
- * holding as many whole rows as the viewport fits. Each page runs its own
- * drag engine with the main grid's shared behavior (reorder, folder
- * creation, Dock pinning); dwelling at a viewport edge mid-drag flips to
- * the adjacent page and hands the gesture off to its engine, and folder
- * drag-outs adopt onto the current page via the coordinator.
+ * each holding the items arranged on it (packed from the first slot,
+ * possibly sparse) up to as many whole rows as the viewport fits —
+ * overflow cascades onto the next page. Each page runs its own drag
+ * engine with the main grid's shared behavior (reorder, folder creation,
+ * Dock pinning); dwelling at a viewport edge mid-drag flips to the
+ * adjacent page — or opens a new one past the last — and hands the
+ * gesture off to its engine, and folder drag-outs adopt onto the current
+ * page via the coordinator.
  */
 export function PagedGrid({
   items,
@@ -291,7 +310,10 @@ export function PagedGrid({
   renamingFolderId,
   onRenameStart,
   onRenameEnd,
-  onOrderChange,
+  pages: committedPages,
+  onPagesChange,
+  onPageReorder,
+  onRetireEmptyPages,
   onDragStateChange,
   dragHandlers,
   dropTarget,
@@ -376,61 +398,89 @@ export function PagedGrid({
   }, [hidden, page]);
 
   const perPage = rows * GRID_COLUMNS;
-  const pages: GridItemUnion[][] = [];
-  if (perPage > 0) {
-    for (let i = 0; i < items.length; i += perPage) {
-      pages.push(items.slice(i, i + perPage));
-    }
-  }
+  // Display structure: the committed pages fitted to the viewport's
+  // capacity (overflow cascades forward). Empty pages are shown as they
+  // come — the committed state holds one only while a page drag is live
+  // (the page a flip emptied keeps its slot until the gesture ends, so
+  // page indices don't shift under the drag); endDrag retires them.
+  const pages = perPage > 0 ? normalizePages(committedPages, perPage, true) : [];
+  const itemsById = new Map(items.map((item) => [item.data.id, item]));
+  const pageItemLists = pages.map((ids) => ids.flatMap((id) => itemsById.get(id) ?? []));
+
+  // Persist the fitted structure when it differs from the committed one
+  // outside a drag — a display change shrank the capacity, a scroll-
+  // layout session grew the last page, or a session ended mid-drag with
+  // an empty page — so stored and shown pages agree
+  const onPagesChangeRef = useLatestRef(onPagesChange);
+  useEffect(() => {
+    if (isPageDragging || perPage === 0) return;
+    const fitted = normalizePages(committedPages, perPage, false);
+    if (!pagesEqual(fitted, committedPages)) onPagesChangeRef.current(fitted);
+  }, [committedPages, perPage, isPageDragging, onPagesChangeRef]);
+
+  // endDrag runs from engine callbacks and from performFlip's async tail,
+  // whose closures predate the flip's own commit — it reads the latest
+  // render instead
+  const latestRef = useLatestRef({ pages, page, onRetireEmptyPages });
+
+  // After endDrag retired pages before the current one, the content under
+  // the viewport shifted left by that many pages: re-aim it before paint
+  const pendingPageRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const target = pendingPageRef.current;
+    if (target === null) return;
+    pendingPageRef.current = null;
+    const el = viewportRef.current;
+    el?.scrollTo({ left: target * el.clientWidth, behavior: "instant" });
+  });
 
   // A folder drag-out lands at the visible page's last slot: everything
-  // before it stays put and the page's last item cascades onward — the
-  // calm-entry counterpart of the flip's near-edge insertion
-  const folderInsertRef = useLatestRef<PagedFolderInsert>((idsWithoutItem, itemId) => {
-    const insertAt = Math.min((page + 1) * perPage - 1, idsWithoutItem.length);
-    const placed = [...idsWithoutItem];
-    placed.splice(insertAt, 0, itemId);
-    return placed;
+  // before it stays put; on a full page the previous last item cascades
+  // onward — the calm-entry counterpart of the flip's near-edge insertion
+  const folderInsertRef = useLatestRef<PagedFolderInsert>((pagesWithoutItem, itemId) => {
+    if (perPage === 0) return appendToLastPage(pagesWithoutItem, [itemId]);
+    const fitted = normalizePages(pagesWithoutItem, perPage, false);
+    const visible = Math.min(page, Math.max(0, fitted.length - 1));
+    const slot = Math.min(fitted[visible]?.length ?? 0, perPage - 1);
+    return normalizePages(insertIntoPage(fitted, visible, slot, itemId), perPage, false);
   });
   useEffect(() => {
-    registerFolderInsert((idsWithoutItem, itemId) =>
-      folderInsertRef.current(idsWithoutItem, itemId)
+    registerFolderInsert((pagesWithoutItem, itemId) =>
+      folderInsertRef.current(pagesWithoutItem, itemId)
     );
     return () => registerFolderInsert(null);
   }, [registerFolderInsert, folderInsertRef]);
 
-  function releaseHeldDrag() {
+  /** The gesture is over (drop, cancel or teardown): release the handle
+   *  and retire the pages it emptied. Retiring a page before the current
+   *  one shifts the content under the viewport, so the current index
+   *  moves with it and the scroll is re-aimed before paint. */
+  function endDrag() {
+    const { pages, page, onRetireEmptyPages } = latestRef.current;
     dragOwnerRef.current = null;
+    clearFlipDwell();
     setIsPageDragging(false);
     onDragStateChange(null);
+    if (!pages.some((p) => p.length === 0)) return;
+    const emptyBefore = pages.slice(0, page).filter((p) => p.length === 0).length;
+    onRetireEmptyPages();
+    if (emptyBefore > 0) {
+      pendingPageRef.current = page - emptyBefore;
+      setPage(page - emptyBefore);
+    }
   }
 
   function handleDragStateChange(pageIndex: number, drag: PagedDragHandle | null) {
     if (drag === null && (flipRef.current.inProgress || dragOwnerRef.current !== pageIndex)) {
       return;
     }
-    if (drag === null) clearFlipDwell();
-    dragOwnerRef.current = drag ? pageIndex : null;
-    setIsPageDragging(drag !== null);
-    onDragStateChange(drag);
-  }
-
-  function handlePageOrderChange(pageIndex: number, pageIds: string[]) {
-    const masterIds = items.map((item) => item.data.id);
-    const start = pageIndex * perPage;
-    // A page may only reorder its own window: same ids, same count. A
-    // mismatch means the partition drifted under the page and committing
-    // would corrupt the master order.
-    const windowIds = new Set(masterIds.slice(start, start + pageIds.length));
-    if (windowIds.size !== pageIds.length || !pageIds.every((id) => windowIds.has(id))) {
-      console.warn("PagedGrid: dropped stale reorder from page", pageIndex);
+    if (drag === null) {
+      endDrag();
       return;
     }
-    onOrderChange([
-      ...masterIds.slice(0, start),
-      ...pageIds,
-      ...masterIds.slice(start + pageIds.length),
-    ]);
+    dragOwnerRef.current = pageIndex;
+    setIsPageDragging(true);
+    onDragStateChange(drag);
   }
 
   /** Arm, re-aim or clear the edge dwell for the current drag position */
@@ -455,8 +505,13 @@ export function PagedGrid({
           ? 1
           : 0;
     const targetPage = pageIndex + direction;
+    // Past the last page a new page opens for the item (Launchpad) —
+    // unless the item is alone on its page, which would only relocate
+    // that page
+    const opensPage =
+      direction === 1 && targetPage === pages.length && (pages[pageIndex]?.length ?? 0) > 1;
 
-    if (direction === 0 || targetPage < 0 || targetPage >= pages.length) {
+    if (direction === 0 || targetPage < 0 || (targetPage >= pages.length && !opensPage)) {
       clearFlipDwell();
       return;
     }
@@ -499,9 +554,8 @@ export function PagedGrid({
    */
   async function performFlip(fromPage: number, toPage: number, itemId: string) {
     const fromEngine = pagesMap.get(fromPage)?.getEngine();
-    const target = pagesMap.get(toPage);
     const viewport = viewportRef.current;
-    if (!fromEngine || !target || !viewport) return;
+    if (!fromEngine || !viewport) return;
 
     // The dwell can fire after the pointer released (a still pointer and a
     // released one both stop producing moves); adopting a ghost that is
@@ -525,28 +579,25 @@ export function PagedGrid({
         // Defensive (a live drag implies a ghost): kill the gesture before
         // dropping the guards, never the other way around
         fromEngine.cancelForHandoff();
-        releaseHeldDrag();
+        endDrag();
         return;
       }
       fromEngine.cancelForHandoff();
 
-      // Move the item into the target page's near-edge slot in the master
-      // order (forward: first slot; backward: last slot). Windows are
-      // positional, so removal and insertion cancel out for every other
-      // item: the target page's tiles stay put, one neighbor backfills
-      // across the boundary, and the item's slot lands where the ghost
-      // already hovers. (Original Launchpad instead left a hole on the
-      // source page — positional windows can't represent gaps.)
-      const masterIds = items.map((item) => item.data.id).filter((id) => id !== itemId);
-      const insertAt = Math.min(
-        toPage > fromPage ? toPage * perPage : toPage * perPage + perPage - 1,
-        masterIds.length
-      );
-      masterIds.splice(insertAt, 0, itemId);
+      // Move the item into the target page's near-edge slot (forward: the
+      // first, backward: the last), opening the page when it lies past the
+      // end. The target's overflow cascades forward; the page the item
+      // left keeps its slot, even empty, until the gesture ends (endDrag).
+      // The item's slot lands where the ghost already hovers. (Original
+      // Launchpad left a hole on the source page instead; pages here pack.)
+      const without = removeFromPages(pages, itemId);
+      const slot =
+        toPage > fromPage ? 0 : Math.min(without[toPage]?.length ?? 0, perPage - 1);
+      const moved = normalizePages(insertIntoPage(without, toPage, slot, itemId), perPage, true);
       // Hidden from first paint on the target page (its engine only takes
-      // over at adoption): committed in the same batch as the order move
+      // over at adoption): committed in the same batch as the page move
       setPendingDragId(itemId);
-      onOrderChange(masterIds);
+      onPagesChange(moved, true);
 
       // Slide to the target page like a normal page change. The first
       // animation frame runs after React commits the new slices, and the
@@ -558,15 +609,18 @@ export function PagedGrid({
         stopFollowing();
       }
 
+      // Resolved only now: a page this flip opened mounts and registers
+      // during the slide
+      const target = pagesMap.get(toPage);
       const element = target
-        .getContainer()
+        ?.getContainer()
         ?.querySelector<HTMLElement>(`[data-draggable][data-id="${CSS.escape(itemId)}"]`);
-      const toEngine = target.getEngine();
+      const toEngine = target?.getEngine();
       if (releaseWatch.wasReleased() || !element || !toEngine) {
         // Released mid-flip: the order move stands (the user did drag the
         // item to this page), but there is no live gesture left to adopt
         ghost.remove();
-        releaseHeldDrag();
+        endDrag();
         return;
       }
 
@@ -609,7 +663,7 @@ export function PagedGrid({
           isPageDragging ? "overflow-x-hidden snap-none" : "overflow-x-auto snap-x snap-mandatory"
         )}
       >
-        {pages.map((pageItems, index) => (
+        {pageItemLists.map((pageItems, index) => (
           <div key={index} className="w-full shrink-0 snap-center">
             <Page
               pageItems={pageItems}
@@ -626,7 +680,7 @@ export function PagedGrid({
               renamingFolderId={renamingFolderId}
               onRenameStart={onRenameStart}
               onRenameEnd={onRenameEnd}
-              onOrderChange={handlePageOrderChange}
+              onOrderChange={onPageReorder}
               onDragStateChange={handleDragStateChange}
               onDragMove={handlePageDragMove}
               registerPage={pageRegistry.register}

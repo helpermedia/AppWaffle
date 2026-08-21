@@ -16,17 +16,22 @@ interface ConfigProviderProps {
 export function ConfigProvider({ children }: ConfigProviderProps) {
   const config = use(configPromise);
 
-  // An empty main order means "no saved arrangement yet", not a saved
-  // empty grid — treat it as absent so the grid seeds alphabetically
+  // No saved pages (or only empty ones) means "no saved arrangement yet",
+  // not a saved empty grid — treat it as absent so the grid seeds
+  // alphabetically
   const orderConfig: OrderConfig | null =
-    config && config.order.main.length > 0 ? config.order : null;
+    config && config.order.pages.some((page) => page.length > 0) ? config.order : null;
 
   const [layout, setLayoutState] = useState<LayoutMode>(config?.settings.layout ?? "scroll");
 
-  // Update order in Rust memory (no disk I/O)
-  // Rust saves to disk on window close for safety
-  function saveOrder(main: string[], folders: FolderMetadata[]) {
-    invoke("update_order", { main, folders });
+  // Update order in Rust memory (no disk I/O); Rust saves to disk on
+  // window close for safety. Rejected whenever the backend holds no config
+  // (the file failed to load, see load_config): every change is then
+  // discarded, so each one says so rather than vanishing silently.
+  function saveOrder(pages: string[][], folders: FolderMetadata[]) {
+    invoke("update_order", { pages, folders }).catch((e) =>
+      console.error("Failed to save order:", e)
+    );
   }
 
   // Settings persist immediately (unlike order): changes are rare and the

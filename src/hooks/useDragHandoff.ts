@@ -5,26 +5,29 @@ import type { HandoffRequest } from "@/lib/helper-dnd";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import type { FolderMetadata } from "@/types/app";
 import { removeAppFromFolder } from "@/utils/folderUtils";
+import { removeFromPages } from "@/utils/pageUtils";
 import type { DragEngine } from "@/lib/helper-dnd";
 
 interface DragGridHandle {
-  order: string[] | null;
-  setOrder: (order: string[]) => void;
   getEngine: () => DragEngine | null;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
-/** Places a folder-dragged-out item into the visible page's window:
- *  receives the order without the item and returns it inserted */
-export type PagedFolderInsert = (idsWithoutItem: string[], itemId: string) => string[];
+/** Places a folder-dragged-out item on the visible page: receives the
+ *  pages without the item and returns them with it inserted */
+export type PagedFolderInsert = (pagesWithoutItem: string[][], itemId: string) => string[][];
 
 interface UseDragHandoffOptions {
   openFolderId: string | null;
   setOpenFolderId: (id: string | null) => void;
   folders: FolderMetadata[];
   setFolders: (folders: FolderMetadata[]) => void;
+  /** Current page structure of the main grid (see pageUtils) */
+  pages: string[][];
+  /** Make a page structure current (persisted by useGrid) */
+  setPages: (pages: string[][]) => void;
+  /** The main grid: the handoff target in scroll layout */
   dragGrid: DragGridHandle;
-  saveOrder: (order: string[], folders: FolderMetadata[]) => void;
   /** False in paged layout: the hidden main grid must not be a handoff
    *  candidate there — the current page registers itself instead */
   registerMainGrid: boolean;
@@ -37,8 +40,9 @@ export function useDragHandoff({
   setOpenFolderId,
   folders,
   setFolders,
+  pages,
+  setPages,
   dragGrid,
-  saveOrder,
   registerMainGrid,
   pagedFolderInsertRef,
 }: UseDragHandoffOptions) {
@@ -47,8 +51,9 @@ export function useDragHandoff({
   // Refs for handoff callback to access current state
   const openFolderIdRef = useLatestRef(openFolderId);
   const foldersRef = useLatestRef(folders);
+  const pagesRef = useLatestRef(pages);
+  const setPagesRef = useLatestRef(setPages);
   const dragGridRef = useLatestRef(dragGrid);
-  const saveOrderRef = useLatestRef(saveOrder);
   const setFoldersRef = useLatestRef(setFolders);
   const setOpenFolderIdRef = useLatestRef(setOpenFolderId);
 
@@ -58,39 +63,34 @@ export function useDragHandoff({
   useEffect(() => {
     coordinator.onHandoff = async (request: HandoffRequest) => {
       const currentOpenFolderId = openFolderIdRef.current;
-      const currentDragGrid = dragGridRef.current;
       const currentFolders = foldersRef.current;
 
-      if (!currentOpenFolderId || !currentDragGrid.order) return;
+      if (!currentOpenFolderId) return;
 
       if (!currentFolders.some((f) => f.id === currentOpenFolderId)) return;
 
-      const { newOrder, updatedFolders } = removeAppFromFolder(
+      const { newPages, updatedFolders } = removeAppFromFolder(
         currentOpenFolderId,
         request.itemId,
-        currentDragGrid.order,
+        pagesRef.current,
         currentFolders,
       );
 
-      // Paged layout: the default placement puts the app at the end of
-      // the order (the last page) or, when the folder dissolved, right of
-      // the folder's old slot — either can fall outside the visible page,
-      // where the adopting engine lives. Re-place it there always.
+      // Paged layout: the default placement puts the app on the last page
+      // or, when the folder dissolved, at the folder's old slot — either
+      // can fall outside the visible page, where the adopting engine
+      // lives. Re-place it there always.
       const pagedInsert = pagedFolderInsertRef.current;
-      const placedOrder =
+      const placedPages =
         pagedInsert && isPageGridId(request.toGridId)
-          ? pagedInsert(
-              newOrder.filter((id) => id !== request.itemId),
-              request.itemId,
-            )
-          : newOrder;
+          ? pagedInsert(removeFromPages(newPages, request.itemId), request.itemId)
+          : newPages;
 
       setFoldersRef.current(updatedFolders);
-      currentDragGrid.setOrder(placedOrder);
-      saveOrderRef.current(placedOrder, updatedFolders);
+      setPagesRef.current(placedPages);
       setOpenFolderIdRef.current(null);
     };
-  }, [coordinator, openFolderIdRef, foldersRef, dragGridRef, saveOrderRef, setFoldersRef, setOpenFolderIdRef, pagedFolderInsertRef]);
+  }, [coordinator, openFolderIdRef, foldersRef, pagesRef, setPagesRef, setFoldersRef, setOpenFolderIdRef, pagedFolderInsertRef]);
   /* eslint-enable react-hooks/immutability */
 
   // Register main grid with coordinator once its engine exists (it does by

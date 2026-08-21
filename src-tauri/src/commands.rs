@@ -5,14 +5,15 @@ use std::process::{Command, Stdio};
 use crate::app_discovery::{app_category, discover_apps_and_folders, get_applications_dirs};
 use crate::config::{
     get_config_path, AppConfig, AppInfo, AppsResponse, FolderInfo, FolderMetadata, LayoutMode,
-    OrderConfig, CONFIG_STATE,
+    OrderConfig, CONFIG_STATE, CONFIG_VERSION,
 };
 use crate::icon_cache::{cleanup_orphaned_icons, get_icon_if_cached};
 use crate::AppError;
 
 /// Load app config from disk and seed the in-memory snapshot that all
-/// later mutations and saves go through. On parse failure the snapshot
-/// stays empty, so exit-time saves leave the (unreadable) file untouched.
+/// later mutations and saves go through. On parse failure, or a file of
+/// another format version, the snapshot stays empty, so exit-time saves
+/// leave that file untouched.
 #[tauri::command]
 pub(crate) async fn load_config() -> Result<AppConfig, AppError> {
     let config_path = get_config_path()
@@ -24,6 +25,12 @@ pub(crate) async fn load_config() -> Result<AppConfig, AppError> {
     } else {
         AppConfig::default()
     };
+    if config.version != CONFIG_VERSION {
+        return Err(AppError::Validation(format!(
+            "Unsupported config version {} (this build reads version {})",
+            config.version, CONFIG_VERSION
+        )));
+    }
 
     *CONFIG_STATE.lock().unwrap_or_else(|p| p.into_inner()) = Some(config.clone());
     Ok(config)
@@ -48,21 +55,25 @@ pub(crate) async fn set_layout(layout: LayoutMode) -> Result<(), AppError> {
 /// Disk write happens only on window close for safety
 #[tauri::command]
 pub(crate) fn update_order(
-    main: Vec<String>,
+    pages: Vec<Vec<String>>,
     folders: Vec<FolderMetadata>,
 ) -> Result<(), AppError> {
+    const MAX_PAGES: usize = 200;
     const MAX_MAIN_ENTRIES: usize = 1000;
     const MAX_FOLDERS: usize = 200;
     const MAX_FOLDER_APPS: usize = 500;
     const MAX_STRING_LEN: usize = 1024;
 
-    if main.len() > MAX_MAIN_ENTRIES {
+    if pages.len() > MAX_PAGES {
+        return Err(AppError::Validation("Too many pages".into()));
+    }
+    if pages.iter().map(Vec::len).sum::<usize>() > MAX_MAIN_ENTRIES {
         return Err(AppError::Validation("Too many main entries".into()));
     }
     if folders.len() > MAX_FOLDERS {
         return Err(AppError::Validation("Too many folders".into()));
     }
-    if main.iter().any(|s| s.len() > MAX_STRING_LEN) {
+    if pages.iter().flatten().any(|s| s.len() > MAX_STRING_LEN) {
         return Err(AppError::Validation("Main entry too long".into()));
     }
     for folder in &folders {
@@ -81,7 +92,7 @@ pub(crate) fn update_order(
     let Some(config) = state.as_mut() else {
         return Err(AppError::Validation("Config not loaded".into()));
     };
-    config.order = OrderConfig { main, folders };
+    config.order = OrderConfig { pages, folders };
     Ok(())
 }
 

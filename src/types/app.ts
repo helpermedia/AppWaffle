@@ -25,7 +25,8 @@ export interface AppsResponse {
 }
 
 export interface OrderConfig {
-  main: string[];
+  /** Main grid as explicit pages: each inner list is one page's items in order */
+  pages: string[][];
   folders: FolderMetadata[];
 }
 

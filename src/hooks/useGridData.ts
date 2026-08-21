@@ -1,6 +1,6 @@
 import type { AppInfo, FolderInfo, FolderMetadata, OrderConfig } from "@/types/app";
 import { buildAppsMap } from "@/utils/appUtils";
-import { isFolderId, resolveFolderApps, resolveOrderToAppItems, convertPhysicalFolders, buildInitialOrder, healFolders } from "@/utils/folderUtils";
+import { isFolderId, resolveFolderApps, resolveOrderToAppItems, convertPhysicalFolders, buildInitialPages, healFolders } from "@/utils/folderUtils";
 import type { GridItem } from "@/components/items/AppItem";
 import type { GridFolder } from "@/components/items/FolderItem";
 
@@ -14,7 +14,8 @@ interface UseGridDataOptions {
   folders: FolderMetadata[];
   orderConfig: OrderConfig | null;
   order: string[] | null;
-  setOrder: (order: string[]) => void;
+  /** Seeds the page structure (and with it the flat order) once */
+  setPages: (pages: string[][]) => void;
   setFolders: (folders: FolderMetadata[]) => void;
   activeId: string | null;
 }
@@ -25,7 +26,7 @@ export function useGridData({
   folders,
   orderConfig,
   order,
-  setOrder,
+  setPages,
   setFolders,
   activeId,
 }: UseGridDataOptions) {
@@ -87,11 +88,11 @@ export function useGridData({
       setFolders(effectiveFolders);
     }
 
-    // Build order from saved config (healing stale/duplicate/folder-contained
+    // Build pages from saved config (healing stale/duplicate/folder-contained
     // entries) or from scratch on first launch — same reconciliation either way
-    setOrder(
-      buildInitialOrder(
-        orderConfig?.main ?? [],
+    setPages(
+      buildInitialPages(
+        orderConfig?.pages ?? [],
         apps.map((a) => a.path),
         effectiveFolders
       )

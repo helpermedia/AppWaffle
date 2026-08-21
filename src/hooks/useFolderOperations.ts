@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AppInfo, FolderMetadata } from "@/types/app";
 import { dissolveFolder, removeAppFromFolder, updateFolderById } from "@/utils/folderUtils";
+import { removeFromPages, replaceInPages } from "@/utils/pageUtils";
 import { categoryDisplayName } from "@/utils/appUtils";
 import type { GridFolder } from "@/components/items/FolderItem";
 
@@ -9,9 +10,10 @@ interface UseFolderOperationsOptions {
   setFolders: (folders: FolderMetadata[]) => void;
   createNewFolder: (appPaths: string[], name?: string) => FolderMetadata;
   appsMap: Map<string, AppInfo>;
-  order: string[] | null;
-  setOrder: (order: string[]) => void;
-  saveOrder: (order: string[], folders: FolderMetadata[]) => void;
+  /** Current page structure of the main grid (see pageUtils) */
+  pages: string[][];
+  /** Make a page structure current (persisted by useGrid) */
+  setPages: (pages: string[][]) => void;
 }
 
 export function useFolderOperations({
@@ -19,9 +21,8 @@ export function useFolderOperations({
   setFolders,
   createNewFolder,
   appsMap,
-  order,
-  setOrder,
-  saveOrder,
+  pages,
+  setPages,
 }: UseFolderOperationsOptions) {
   // Only the id is state — name/apps of the open folder are derived live in
   // useGrid from folders + appsMap, so there is a single source of truth
@@ -43,23 +44,14 @@ export function useFolderOperations({
   function handleRenameFolder(folderId: string, newName: string) {
     const updatedFolders = updateFolderById(folders, folderId, { name: newName });
     setFolders(updatedFolders);
-
-    if (order) {
-      saveOrder(order, updatedFolders);
-    }
   }
 
   function handleFolderOrderChange(folderId: string, newOrder: string[]) {
     const updatedFolders = updateFolderById(folders, folderId, { appPaths: newOrder });
     setFolders(updatedFolders);
-    if (order) {
-      saveOrder(order, updatedFolders);
-    }
   }
 
   function handleCreateFolder(sourceAppId: string, targetAppId: string) {
-    if (!order) return;
-
     // Suggest a name from the apps' App Store category, like Launchpad:
     // prefer the target's category, fall back to the source's
     const suggestedName =
@@ -73,32 +65,16 @@ export function useFolderOperations({
     setNewFolderId(newFolder.id);
     setOpenFolderId(newFolder.id);
 
-    // Update order - folder goes where target was
-    const sourceIndex = order.indexOf(sourceAppId);
-    const targetIndex = order.indexOf(targetAppId);
-    const newOrder = order.filter((id) => id !== sourceAppId && id !== targetAppId);
-
-    // Adjust insert index: if source was before target, target's position shifts down by 1
-    let insertIndex = targetIndex;
-    if (sourceIndex < targetIndex) {
-      insertIndex--;
-    }
-    insertIndex = Math.min(insertIndex, newOrder.length);
-    newOrder.splice(insertIndex, 0, newFolder.id);
-
-    const updatedFolders = [...folders, newFolder];
-    setOrder(newOrder);
-    saveOrder(newOrder, updatedFolders);
+    // The folder takes the target's slot; the source leaves its page
+    const newPages = replaceInPages(removeFromPages(pages, sourceAppId), targetAppId, [
+      newFolder.id,
+    ]);
+    setPages(newPages);
   }
 
   function handleAddToFolder(folderId: string, appId: string) {
-    if (!order) return;
-
     const existingFolder = folders.find((f) => f.id === folderId);
     if (!existingFolder) return;
-
-    // Remove app from main grid
-    const newOrder = order.filter((id) => id !== appId);
 
     // Add app to folder
     const updatedAppPaths = [...existingFolder.appPaths, appId];
@@ -108,40 +84,37 @@ export function useFolderOperations({
     setOpenFolderId(folderId);
 
     setFolders(updatedFolders);
-    setOrder(newOrder);
-    saveOrder(newOrder, updatedFolders);
+    // The app leaves its page
+    setPages(removeFromPages(pages, appId));
   }
 
   function handleRemoveFromFolder(appId: string) {
-    if (!openFolderId || !order) return;
+    if (!openFolderId) return;
     if (!folders.some((f) => f.id === openFolderId)) return;
 
-    const { newOrder, updatedFolders, dissolved } = removeAppFromFolder(
-      openFolderId, appId, order, folders,
+    const { newPages, updatedFolders, dissolved } = removeAppFromFolder(
+      openFolderId, appId, pages, folders,
     );
 
     setFolders(updatedFolders);
-    setOrder(newOrder);
-    saveOrder(newOrder, updatedFolders);
+    setPages(newPages);
 
     if (dissolved) {
       setOpenFolderId(null);
     }
   }
 
-  /** Dissolve a folder back into the grid: its apps take its slot in the
-   *  order (context-menu Ungroup) */
+  /** Dissolve a folder back into the grid: its apps take its slot on its
+   *  page (context-menu Ungroup) */
   function handleUngroupFolder(folderId: string) {
-    if (!order) return;
     const folder = folders.find((f) => f.id === folderId);
     if (!folder) return;
 
-    const { newOrder, updatedFolders } = dissolveFolder(
-      folderId, order, folders, folder.appPaths,
+    const { newPages, updatedFolders } = dissolveFolder(
+      folderId, pages, folders, folder.appPaths,
     );
     setFolders(updatedFolders);
-    setOrder(newOrder);
-    saveOrder(newOrder, updatedFolders);
+    setPages(newPages);
   }
 
   function getOpenFolderSavedOrder(): string[] | undefined {

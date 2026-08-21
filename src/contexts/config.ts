@@ -6,7 +6,7 @@ export interface ConfigContextValue {
   orderConfig: OrderConfig | null;
 
   // Persistence
-  saveOrder: (main: string[], folders: FolderMetadata[]) => void;
+  saveOrder: (pages: string[][], folders: FolderMetadata[]) => void;
 
   // View settings
   layout: LayoutMode;

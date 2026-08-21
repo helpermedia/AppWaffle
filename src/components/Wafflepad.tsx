@@ -28,7 +28,10 @@ export function Wafflepad() {
     cancelDrag,
     dropTarget,
     coordinator,
-    handleMainOrderChange,
+    pages,
+    handlePagesChange,
+    reorderPage,
+    retireEmptyPages,
     pageDragHandlers,
     setActivePageEngine,
     setPagedFolderInsert,
@@ -375,7 +378,10 @@ export function Wafflepad() {
             renamingFolderId={renamingFolderId}
             onRenameStart={onRenameStart}
             onRenameEnd={onRenameEnd}
-            onOrderChange={handleMainOrderChange}
+            pages={pages}
+            onPagesChange={handlePagesChange}
+            onPageReorder={reorderPage}
+            onRetireEmptyPages={retireEmptyPages}
             onDragStateChange={handlePagedDragChange}
             dragHandlers={pageDragHandlers}
             dropTarget={dropTarget}

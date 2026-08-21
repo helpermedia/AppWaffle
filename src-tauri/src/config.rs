@@ -39,74 +39,52 @@ pub struct FolderMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OrderConfig {
-    #[serde(default)]
-    pub main: Vec<String>,
-    #[serde(default)]
+    /// Main grid as explicit pages (the Launchpad model): each inner list
+    /// is one page's items in order
+    pub pages: Vec<Vec<String>>,
     pub folders: Vec<FolderMetadata>,
 }
 
-/// How the main grid presents apps.
-/// Deserializes leniently via From<String>: an unrecognized value (e.g.
-/// written by a newer version) falls back to Scroll instead of failing
-/// the whole config parse.
+/// How the main grid presents apps
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase", from = "String")]
+#[serde(rename_all = "lowercase")]
 pub enum LayoutMode {
     #[default]
     Scroll,
     Paged,
 }
 
-impl From<String> for LayoutMode {
-    fn from(value: String) -> Self {
-        match value.as_str() {
-            "paged" => LayoutMode::Paged,
-            _ => LayoutMode::Scroll,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppSettings {
-    #[serde(default)]
     pub layout: LayoutMode,
-    /// Settings this build doesn't model (e.g. from a newer version)
-    /// round-trip untouched
-    #[serde(flatten)]
-    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-fn default_version() -> u32 {
-    1
-}
+/// Format of the config file this build reads and writes. The file must
+/// match exactly — load_config refuses any other version, and a refused
+/// file is never overwritten. When the shape changes, bump this and
+/// migrate the versions before it there; this one is the first.
+pub(crate) const CONFIG_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    #[serde(default = "default_version")]
     pub version: u32,
     pub order: OrderConfig,
-    #[serde(default)]
     pub settings: AppSettings,
-    /// Top-level keys this build doesn't model round-trip untouched
-    #[serde(flatten)]
-    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: 1,
+            version: CONFIG_VERSION,
             order: OrderConfig::default(),
             settings: AppSettings::default(),
-            extra: serde_json::Map::new(),
         }
     }
 }
 
 /// In-memory config snapshot: seeded by load_config, mutated by
 /// update_order/set_layout, written by save_config_to_disk. Holding the
-/// whole parsed config (version and unknown keys included) means saves
-/// never re-read the file and can't regress data this build doesn't model.
+/// whole parsed config means saves never re-read the file.
 pub(crate) static CONFIG_STATE: Mutex<Option<AppConfig>> = Mutex::new(None);
 
 /// Serializes disk writes so concurrent save_order_to_disk() calls don't interleave

@@ -1,4 +1,5 @@
 import type { AppInfo, FolderInfo, FolderMetadata } from "@/types/app";
+import { appendToLastPage, removeFromPages, replaceInPages } from "@/utils/pageUtils";
 
 const FOLDER_PREFIX = "folder://";
 
@@ -68,16 +69,18 @@ export function healFolders(
 }
 
 /**
- * Build the initial main-grid order from a saved order and discovered items.
+ * Build the initial pages from the saved pages and the discovered items.
  * Drops ids that no longer exist, apps that live inside folders, and
  * duplicates (healing configs corrupted by earlier versions), then appends
- * newly discovered items at the end.
+ * newly discovered items to the last page — from where the paged layout
+ * cascades them onto further pages as capacity requires. A page left empty
+ * is retired by the caller's commit.
  */
-export function buildInitialOrder(
-  savedMain: string[],
+export function buildInitialPages(
+  savedPages: string[][],
   appPaths: string[],
   folders: FolderMetadata[]
-): string[] {
+): string[][] {
   const folderContained = new Set(folders.flatMap((f) => f.appPaths));
   const allIds = new Set([
     ...appPaths.filter((path) => !folderContained.has(path)),
@@ -85,64 +88,62 @@ export function buildInitialOrder(
   ]);
 
   const seen = new Set<string>();
-  const validSavedOrder = savedMain.filter((id) => {
-    if (!allIds.has(id) || seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
+  const pages = savedPages.map((page) =>
+    page.filter((id) => {
+      if (!allIds.has(id) || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    })
+  );
   const newItems = [...allIds].filter((id) => !seen.has(id));
-  return [...validSavedOrder, ...newItems];
+  return newItems.length > 0 ? appendToLastPage(pages, newItems) : pages;
 }
 
 /**
- * Dissolve a folder back into individual apps in the main grid order.
- * Replaces the folder entry with the given apps at the folder's position.
+ * Dissolve a folder back into individual apps: they take the folder's
+ * slot on its page (which overflows forward if they don't fit).
  */
 export function dissolveFolder(
   folderId: string,
-  order: string[],
+  pages: string[][],
   currentFolders: FolderMetadata[],
   appsToInsert: string[]
-): { newOrder: string[]; updatedFolders: FolderMetadata[] } {
+): { newPages: string[][]; updatedFolders: FolderMetadata[] } {
   // Drop any stray copies of the inserted apps so they can't end up twice
-  const newOrder = order.filter((id) => !appsToInsert.includes(id));
-  const folderIndex = newOrder.indexOf(folderId);
-  if (folderIndex === -1) {
-    newOrder.push(...appsToInsert);
-  } else {
-    newOrder.splice(folderIndex, 1, ...appsToInsert);
-  }
+  const inserted = new Set(appsToInsert);
+  const cleaned = pages.map((page) => page.filter((id) => !inserted.has(id)));
+  const newPages = replaceInPages(cleaned, folderId, appsToInsert);
   const updatedFolders = currentFolders.filter((f) => f.id !== folderId);
-  return { newOrder, updatedFolders };
+  return { newPages, updatedFolders };
 }
 
 /**
- * Remove an app from a folder and compute the resulting order/folders.
+ * Remove an app from a folder and compute the resulting pages/folders.
  * If the folder has 0-1 apps remaining, it is dissolved (apps return to the grid).
- * Otherwise the folder is updated and the removed app is appended to the grid.
+ * Otherwise the folder is updated and the removed app joins the last page.
  */
 export function removeAppFromFolder(
   folderId: string,
   appId: string,
-  order: string[],
+  pages: string[][],
   folders: FolderMetadata[],
-): { newOrder: string[]; updatedFolders: FolderMetadata[]; dissolved: boolean } {
+): { newPages: string[][]; updatedFolders: FolderMetadata[]; dissolved: boolean } {
   const folder = folders.find((f) => f.id === folderId);
-  if (!folder) return { newOrder: order, updatedFolders: folders, dissolved: false };
+  if (!folder) return { newPages: pages, updatedFolders: folders, dissolved: false };
 
   const remainingApps = folder.appPaths.filter((id) => id !== appId);
 
   if (remainingApps.length <= 1) {
-    const { newOrder, updatedFolders } = dissolveFolder(
-      folderId, order, folders, [...remainingApps, appId],
+    const { newPages, updatedFolders } = dissolveFolder(
+      folderId, pages, folders, [...remainingApps, appId],
     );
-    return { newOrder, updatedFolders, dissolved: true };
+    return { newPages, updatedFolders, dissolved: true };
   }
 
   const updatedFolders = updateFolderById(folders, folderId, { appPaths: remainingApps });
-  // Filter first: the app must never appear twice in the grid order
-  const newOrder = [...order.filter((id) => id !== appId), appId];
-  return { newOrder, updatedFolders, dissolved: false };
+  // Remove first: the app must never appear twice in the grid
+  const newPages = appendToLastPage(removeFromPages(pages, appId), [appId]);
+  return { newPages, updatedFolders, dissolved: false };
 }
 
 /**

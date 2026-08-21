@@ -195,9 +195,11 @@ function getActiveRect(state: DragState): Rect {
 }
 
 /**
- * Reorder an array by moving an item from one index to another.
+ * Reorder an array by moving an item from one index to another — the
+ * exact move a drop commits, exported so a host can derive the same
+ * result synchronously (useGrid re-partitions pages in the drop's commit).
  */
-function arrayMove<T>(array: T[], fromIndex: number, toIndex: number): T[] {
+export function arrayMove<T>(array: T[], fromIndex: number, toIndex: number): T[] {
   const result = [...array];
   const [removed] = result.splice(fromIndex, 1);
   result.splice(toIndex, 0, removed);
