@@ -222,6 +222,7 @@ export function useGrid() {
     handleRenameFolder: folderOps.handleRenameFolder,
     handleFolderOrderChange: folderOps.handleFolderOrderChange,
     handleRemoveFromFolder: folderOps.handleRemoveFromFolder,
+    handleUngroupFolder: folderOps.handleUngroupFolder,
     getOpenFolderSavedOrder: folderOps.getOpenFolderSavedOrder,
   };
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AppInfo, FolderMetadata } from "@/types/app";
-import { removeAppFromFolder, updateFolderById } from "@/utils/folderUtils";
+import { dissolveFolder, removeAppFromFolder, updateFolderById } from "@/utils/folderUtils";
 import { categoryDisplayName } from "@/utils/appUtils";
 import type { GridFolder } from "@/components/items/FolderItem";
 
@@ -129,6 +129,21 @@ export function useFolderOperations({
     }
   }
 
+  /** Dissolve a folder back into the grid: its apps take its slot in the
+   *  order (context-menu Ungroup) */
+  function handleUngroupFolder(folderId: string) {
+    if (!order) return;
+    const folder = folders.find((f) => f.id === folderId);
+    if (!folder) return;
+
+    const { newOrder, updatedFolders } = dissolveFolder(
+      folderId, order, folders, folder.appPaths,
+    );
+    setFolders(updatedFolders);
+    setOrder(newOrder);
+    saveOrder(newOrder, updatedFolders);
+  }
+
   function getOpenFolderSavedOrder(): string[] | undefined {
     if (!openFolderId) return undefined;
     return folders.find((f) => f.id === openFolderId)?.appPaths;
@@ -145,6 +160,7 @@ export function useFolderOperations({
     handleRemoveFromFolder,
     handleCreateFolder,
     handleAddToFolder,
+    handleUngroupFolder,
     getOpenFolderSavedOrder,
   };
 }

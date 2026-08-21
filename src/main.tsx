@@ -6,10 +6,11 @@ import { Wafflepad } from "./components/Wafflepad";
 import "./index.css";
 
 // Suppress the WebView's default context menu (Reload, image actions, …) —
-// app icons show a native menu instead (AppItem). Editable fields keep the
-// default menu: with no Edit menu in the menu bar, right-click Paste is
-// the only paste path into search and rename. Dev builds keep the default
-// everywhere so right-click → Inspect Element stays available.
+// app and folder tiles show native menus instead (AppItem, FolderItem).
+// Editable fields keep the default menu: with no Edit menu in the menu bar,
+// right-click Paste is the only paste path into search and rename. Dev
+// builds keep the default everywhere so right-click → Inspect Element stays
+// available.
 if (import.meta.env.PROD) {
   window.addEventListener("contextmenu", (e) => {
     const target = e.target as HTMLElement;

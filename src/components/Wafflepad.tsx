@@ -6,7 +6,7 @@ import { useCloseAnimation } from "@/hooks/useCloseAnimation";
 import { useDocumentEscape } from "@/hooks/useDocumentEscape";
 import { useKeyboardNav } from "@/hooks/useKeyboardNav";
 import { AppItem } from "@/components/items/AppItem";
-import { FolderItem } from "@/components/items/FolderItem";
+import { FolderItem, type GridFolder } from "@/components/items/FolderItem";
 import { FolderModal } from "@/components/FolderModal";
 import { OptionsButton } from "@/components/OptionsButton";
 import { PagedGrid, type PagedDragHandle } from "@/components/PagedGrid";
@@ -36,12 +36,16 @@ export function Wafflepad() {
     handleCloseFolder,
     handleRenameFolder,
     handleFolderOrderChange,
+    handleUngroupFolder,
     getOpenFolderSavedOrder,
   } = useGrid();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const savedScrollTop = useRef(0);
-  const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
+  // The last press: where it landed, and whether an inline rename input
+  // held focus (so the press blurred and committed it) — consumed by the
+  // click handler
+  const mouseDownRef = useRef<{ x: number; y: number; blursEdit: boolean } | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [launchingPath, setLaunchingPath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -65,11 +69,36 @@ export function Wafflepad() {
   const searchResults = searchQuery ? searchApps(items, searchQuery) : null;
 
   // Save scroll position when opening folder
-  function onOpenFolder(folder: Parameters<typeof handleOpenFolder>[0]) {
+  function onOpenFolder(folder: GridFolder) {
     if (scrollRef.current) {
       savedScrollTop.current = scrollRef.current.scrollTop;
     }
     handleOpenFolder(folder);
+  }
+
+  function onUngroupFolder(folder: GridFolder) {
+    handleUngroupFolder(folder.id);
+  }
+
+  // Inline folder rename (context-menu Rename): the tile swaps its label
+  // for an input. The host owns the state so Escape, click-outside and
+  // search focus can be guarded around it.
+  const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
+  // Only the mounted input can end a rename, so an input that unmounts
+  // without one (its folder removed from under it) would leave the guards
+  // below wedged for the session — derive against the live items to heal
+  const renamingFolderId =
+    renameTargetId !== null && items.some((item) => item.data.id === renameTargetId)
+      ? renameTargetId
+      : null;
+
+  function onRenameStart(folder: GridFolder) {
+    setRenameTargetId(folder.id);
+  }
+
+  function onRenameEnd(folder: GridFolder, newName: string | null) {
+    if (newName !== null) handleRenameFolder(folder.id, newName);
+    setRenameTargetId(null);
   }
 
   // Restore scroll position when closing folder
@@ -127,19 +156,20 @@ export function Wafflepad() {
   const { selectedId } = useKeyboardNav({
     ids: navigableIds,
     columns: GRID_COLUMNS,
-    enabled: !openFolder && !anyDragging && !isClosing,
+    enabled: !openFolder && !anyDragging && !isClosing && !renamingFolderId,
     autoSelectFirst: searchResults !== null,
     resetKey: searchQuery,
     onActivate: handleActivate,
   });
 
   // Keep the search field focused so typing always searches (Launchpad
-  // behavior) — on mount and whenever the folder modal closes
+  // behavior) — on mount, whenever the folder modal closes, and when an
+  // inline rename ends (its input took focus and then unmounted)
   useEffect(() => {
-    if (!openFolder) {
+    if (!openFolder && !renamingFolderId) {
       searchInputRef.current?.focus({ preventScroll: true });
     }
-  }, [openFolder]);
+  }, [openFolder, renamingFolderId]);
 
   const searchScrollTop = useRef(0);
   const wasSearchingRef = useRef(false);
@@ -160,11 +190,12 @@ export function Wafflepad() {
   }, [searchQuery]);
 
   // Escape peels one layer per press: the folder modal owns it while open,
-  // an active drag cancels, a search query clears, otherwise close.
-  // Tests searchQuery (not query) so layers match what's on screen —
+  // so does an inline rename's input (which also stops the event at the
+  // React root), an active drag cancels, a search query clears, otherwise
+  // close. Tests searchQuery (not query) so layers match what's on screen —
   // whitespace-only input shows the normal grid and must not eat a press.
   useDocumentEscape(() => {
-    if (openFolder || coordinator.isHandoffInProgress()) return;
+    if (openFolder || renamingFolderId || coordinator.isHandoffInProgress()) return;
     if (anyDragging) {
       cancelDrag();
       pagedDrag?.cancel();
@@ -185,9 +216,14 @@ export function Wafflepad() {
     // on the common ancestor of press and release — the background — and
     // must not quit the launcher. Consumed on read so a click with no
     // fresh press can't compare against a stale one.
-    const start = mouseDownPos.current;
-    mouseDownPos.current = null;
-    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5) return;
+    const press = mouseDownRef.current;
+    mouseDownRef.current = null;
+    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 5) return;
+    // A press that blurred an inline rename already did its job (the blur
+    // committed the name): that click must not also close the launcher.
+    // Read from the press, not from state — the blur's state update has
+    // flushed by the time the click arrives.
+    if (press?.blursEdit) return;
     const target = e.target as HTMLElement;
     if (!target.closest("[data-grid-item], [data-keep-open]")) {
       closeApp();
@@ -195,23 +231,26 @@ export function Wafflepad() {
   }
 
   // Clicks must not steal focus from the search field — except clicks into
-  // real editable controls, or while another editable (the folder rename
-  // input) holds focus: it commits on blur, so the click-away must be
-  // allowed to blur it or the rename would be lost.
+  // real editable controls. While another editable (the folder modal's or
+  // a tile's rename input) holds focus, the press blurs it explicitly,
+  // which commits the rename, and still prevents the default: the browser
+  // only moves focus for primary-button presses (a right-click must commit
+  // too, before the context menu it opens can act on the folder), and its
+  // default action runs after React has flushed the commit — whose effect
+  // has just returned focus to the search field — and would clear it again.
   // Note: this supersedes the label-selectability affordance of icon-scoped
   // drag handles (helper-dnd README) — moot here, as body-level select-none
   // already disables label selection app-wide.
   function handleRootMouseDown(e: React.MouseEvent) {
-    mouseDownPos.current = { x: e.clientX, y: e.clientY };
     const target = e.target as HTMLElement;
-    if (target.closest("input, textarea")) return;
     const active = document.activeElement;
     const editableAwaitingBlur =
       (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) &&
       !active.hasAttribute("data-search-input");
-    if (!editableAwaitingBlur) {
-      e.preventDefault();
-    }
+    mouseDownRef.current = { x: e.clientX, y: e.clientY, blursEdit: editableAwaitingBlur };
+    if (target.closest("input, textarea")) return;
+    if (editableAwaitingBlur) active.blur();
+    e.preventDefault();
   }
 
   return (
@@ -310,6 +349,12 @@ export function Wafflepad() {
                     dropAction={dropAction}
                     isSelected={selectedId === item.data.id}
                     onOpen={onOpenFolder}
+                    onUngroup={onUngroupFolder}
+                    // Hidden in paged layout, where the page tile renders
+                    // the input — a second one here would be dead weight
+                    isRenaming={layout !== "paged" && renamingFolderId === item.data.id}
+                    onRenameStart={onRenameStart}
+                    onRenameEnd={onRenameEnd}
                   />
                 );
               }
@@ -326,6 +371,10 @@ export function Wafflepad() {
             onLaunch={handleLaunch}
             onCloseApp={closeApp}
             onOpenFolder={onOpenFolder}
+            onUngroupFolder={onUngroupFolder}
+            renamingFolderId={renamingFolderId}
+            onRenameStart={onRenameStart}
+            onRenameEnd={onRenameEnd}
             onOrderChange={handleMainOrderChange}
             onDragStateChange={handlePagedDragChange}
             dragHandlers={pageDragHandlers}

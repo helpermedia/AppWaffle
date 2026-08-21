@@ -1,5 +1,5 @@
-//! Native menus for the frontend: the app-tile context menu and the
-//! view-options menu.
+//! Native menus for the frontend: the app-tile and folder-tile context
+//! menus and the view-options menu.
 //!
 //! Tauri's menu API (muda) can only attach legacy named template images to
 //! items, which look nothing like the SF Symbols the macOS Apps app uses.
@@ -23,6 +23,26 @@ pub(crate) fn show_app_menu(window: tauri::WebviewWindow, path: String) -> Resul
         let _ = (window, path);
         Err(AppError::Validation(
             "App menu is only available on macOS".into(),
+        ))
+    }
+}
+
+/// Show the context menu for a folder tile at the current cursor position.
+/// The chosen action is emitted as a "folder-menu-action" event. Sync
+/// command: main thread, blocks until dismissed, like show_app_menu.
+#[tauri::command]
+pub(crate) fn show_folder_menu(
+    window: tauri::WebviewWindow,
+    folder_id: String,
+) -> Result<(), AppError> {
+    #[cfg(target_os = "macos")]
+    return macos::show_folder(&window, folder_id);
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, folder_id);
+        Err(AppError::Validation(
+            "Folder menu is only available on macOS".into(),
         ))
     }
 }
@@ -206,6 +226,54 @@ mod macos {
                     ActionPayload {
                         action,
                         path: path.clone(),
+                    },
+                );
+            }),
+        )
+    }
+
+    /// Menu title, SF Symbol, action id — same shape as APP_ACTIONS.
+    /// Actions are pure frontend state changes, so the payload only names
+    /// the choice; the frontend routes it to the tile's callbacks.
+    const FOLDER_ACTIONS: [(&str, &str, &str); 3] = [
+        ("Open", "folder", "open"),
+        ("Rename", "pencil", "rename"),
+        ("Ungroup", "folder.badge.minus", "ungroup"),
+    ];
+
+    #[derive(Clone, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct FolderActionPayload {
+        action: &'static str,
+        folder_id: String,
+    }
+
+    pub(super) fn show_folder(
+        window: &tauri::WebviewWindow,
+        folder_id: String,
+    ) -> Result<(), AppError> {
+        let app = window.app_handle().clone();
+        let items: Vec<ItemSpec> = FOLDER_ACTIONS
+            .iter()
+            .map(|(title, symbol, _)| ItemSpec {
+                title,
+                symbol: Some(symbol),
+                checked: false,
+            })
+            .collect();
+
+        popup(
+            None,
+            &items,
+            Box::new(move |index| {
+                let Some((_, _, action)) = FOLDER_ACTIONS.get(index) else {
+                    return;
+                };
+                let _ = app.emit(
+                    "folder-menu-action",
+                    FolderActionPayload {
+                        action,
+                        folder_id: folder_id.clone(),
                     },
                 );
             }),

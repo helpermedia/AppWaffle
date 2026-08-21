@@ -69,6 +69,11 @@ interface PagedGridProps {
   onLaunch: (path: string) => void;
   onCloseApp: () => void;
   onOpenFolder: (folder: GridFolder) => void;
+  onUngroupFolder: (folder: GridFolder) => void;
+  /** Inline folder rename: host-owned state and its transitions */
+  renamingFolderId: string | null;
+  onRenameStart: (folder: GridFolder) => void;
+  onRenameEnd: (folder: GridFolder, newName: string | null) => void;
   /** Commit a new master order (a page's reorder spliced into the whole) */
   onOrderChange: (newOrder: string[]) => void;
   /** Reports the active page drag, null when none (Escape and guards) */
@@ -96,6 +101,10 @@ interface PageProps {
   onLaunch: (path: string) => void;
   onCloseApp: () => void;
   onOpenFolder: (folder: GridFolder) => void;
+  onUngroupFolder: (folder: GridFolder) => void;
+  renamingFolderId: string | null;
+  onRenameStart: (folder: GridFolder) => void;
+  onRenameEnd: (folder: GridFolder, newName: string | null) => void;
   onOrderChange: (pageIndex: number, pageIds: string[]) => void;
   onDragStateChange: (pageIndex: number, drag: PagedDragHandle | null) => void;
   onDragMove: (pageIndex: number, info: DragMoveInfo, dockOwned: boolean) => void;
@@ -128,6 +137,10 @@ function Page({
   onLaunch,
   onCloseApp,
   onOpenFolder,
+  onUngroupFolder,
+  renamingFolderId,
+  onRenameStart,
+  onRenameEnd,
   onOrderChange,
   onDragStateChange,
   onDragMove,
@@ -247,6 +260,10 @@ function Page({
             dropAction={dropAction}
             isSelected={selectedId === item.data.id}
             onOpen={onOpenFolder}
+            onUngroup={onUngroupFolder}
+            isRenaming={renamingFolderId === item.data.id}
+            onRenameStart={onRenameStart}
+            onRenameEnd={onRenameEnd}
           />
         );
       })}
@@ -270,6 +287,10 @@ export function PagedGrid({
   onLaunch,
   onCloseApp,
   onOpenFolder,
+  onUngroupFolder,
+  renamingFolderId,
+  onRenameStart,
+  onRenameEnd,
   onOrderChange,
   onDragStateChange,
   dragHandlers,
@@ -601,6 +622,10 @@ export function PagedGrid({
               onLaunch={onLaunch}
               onCloseApp={onCloseApp}
               onOpenFolder={onOpenFolder}
+              onUngroupFolder={onUngroupFolder}
+              renamingFolderId={renamingFolderId}
+              onRenameStart={onRenameStart}
+              onRenameEnd={onRenameEnd}
               onOrderChange={handlePageOrderChange}
               onDragStateChange={handleDragStateChange}
               onDragMove={handlePageDragMove}
