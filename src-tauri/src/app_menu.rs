@@ -280,8 +280,9 @@ mod macos {
         )
     }
 
-    /// Menu title, layout id — ids match LayoutMode's serde names
-    const LAYOUTS: [(&str, &str); 2] = [("Scrollable", "scroll"), ("Paged", "paged")];
+    /// Menu title, layout id — ids match LayoutMode's serde names; the
+    /// default (Paged) leads
+    const LAYOUTS: [(&str, &str); 2] = [("Paged", "paged"), ("Scrollable", "scroll")];
 
     #[derive(Clone, Serialize)]
     struct LayoutPayload {

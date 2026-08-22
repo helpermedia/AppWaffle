@@ -56,7 +56,12 @@ function scrollSelectionIntoView(id: string) {
   const candidates = document.querySelectorAll<HTMLElement>(`[data-id="${CSS.escape(id)}"]`);
   for (const el of candidates) {
     if (el.checkVisibility?.() ?? el.offsetParent !== null) {
-      el.scrollIntoView({ block: "nearest" });
+      // The paged viewport slides itself to the selection's page: overflow
+      // hidden still leaves it a scroll container, and scrollIntoView's
+      // minimal scroll would drag it off its page boundaries
+      if (!el.closest("[data-paged-viewport]")) {
+        el.scrollIntoView({ block: "nearest" });
+      }
       return;
     }
   }

@@ -69,12 +69,13 @@ export function healFolders(
 }
 
 /**
- * Build the initial pages from the saved pages and the discovered items.
- * Drops ids that no longer exist, apps that live inside folders, and
- * duplicates (healing configs corrupted by earlier versions), then appends
- * newly discovered items to the last page — from where the paged layout
- * cascades them onto further pages as capacity requires. A page left empty
- * is retired by the caller's commit.
+ * Build the initial pages from the saved pages and the discovered items:
+ * reconciles the saved arrangement with what is installed now. Drops ids
+ * that no longer exist, apps that live inside folders and repeated ids
+ * (every id appears once — keys and drag indices depend on it), then
+ * appends newly discovered items to the last page, from where the paged
+ * layout cascades them onto further pages as capacity requires. A page
+ * left empty is retired by the caller's commit.
  */
 export function buildInitialPages(
   savedPages: string[][],

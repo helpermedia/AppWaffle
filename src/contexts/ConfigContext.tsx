@@ -22,7 +22,9 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
   const orderConfig: OrderConfig | null =
     config && config.order.pages.some((page) => page.length > 0) ? config.order : null;
 
-  const [layout, setLayoutState] = useState<LayoutMode>(config?.settings.layout ?? "scroll");
+  // Paged by default: pages are the point of the app (must match the
+  // backend's LayoutMode default, which the first save writes)
+  const [layout, setLayoutState] = useState<LayoutMode>(config?.settings.layout ?? "paged");
 
   // Update order in Rust memory (no disk I/O); Rust saves to disk on
   // window close for safety. Rejected whenever the backend holds no config

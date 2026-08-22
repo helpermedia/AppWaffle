@@ -44,15 +44,30 @@ const FLIP_DWELL_MS = 400;
 /** Duration of the page slide when a drag flips pages */
 const FLIP_ANIMATION_MS = 300;
 
-/** Slide the viewport with per-frame instant scrolls: CSS scroll-smooth
- *  has no completion signal, and the target engine must cache item rects
- *  only after the viewport settles */
-function animateViewportTo(el: HTMLElement, targetLeft: number): Promise<void> {
+/** Gap between wheel events that separates two gestures: a scroll wheel's
+ *  notches arrive slower than this, a trackpad's stream and its momentum
+ *  tail faster */
+const WHEEL_GAP_MS = 80;
+
+/** Slide the viewport with per-frame instant scrolls: a native smooth
+ *  scroll has no completion signal (the flip's target engine must cache
+ *  item rects only after the viewport settles) and is interrupted by
+ *  further wheel input (a wheel page turn must survive its gesture's
+ *  momentum tail, yielding only to the next turn via isCancelled) */
+function animateViewportTo(
+  el: HTMLElement,
+  targetLeft: number,
+  isCancelled?: () => boolean
+): Promise<void> {
   return new Promise((resolve) => {
     const startLeft = el.scrollLeft;
     const delta = targetLeft - startLeft;
     const start = performance.now();
     function frame(now: number) {
+      if (isCancelled?.()) {
+        resolve();
+        return;
+      }
       const t = Math.min(1, (now - start) / FLIP_ANIMATION_MS);
       const eased = 1 - Math.pow(1 - t, 3);
       el.scrollTo({ left: startLeft + delta * eased, behavior: "instant" });
@@ -64,6 +79,106 @@ function animateViewportTo(el: HTMLElement, targetLeft: number): Promise<void> {
     }
     requestAnimationFrame(frame);
   });
+}
+
+/** One wheel gesture's running state (see readWheelTurn) */
+interface WheelState {
+  /** The axis the gesture opened on — it keeps it, so a diagonal stroke
+   *  can't flicker between axes and read as reversals */
+  axis: "x" | "y";
+  lastTime: number;
+  lastDelta: number;
+  /** Largest magnitude of the gesture so far */
+  peak: number;
+  /** Smallest magnitude since the gesture began to decay */
+  trough: number;
+  /** The gesture has fallen clearly below its peak (momentum) */
+  decayed: boolean;
+  /** Page the running slide is heading to, until it lands */
+  target: number | null;
+  /** Bumped by every slide and cancel: a slide stops once it no longer
+   *  holds the current id */
+  slideId: number;
+}
+
+/**
+ * Interpret one wheel event against the gesture state: the direction of
+ * the page turn this event starts, or 0. A gesture turns one page the
+ * moment it starts (a swipe must not wait for its momentum to die down);
+ * gestures are told apart without phase information — a gap between
+ * events (a wheel's notches), a change of direction, or a sharp rise in
+ * delta once the stream has begun to decay (a second swipe during the
+ * first one's momentum tail).
+ */
+function readWheelTurn(
+  wheel: WheelState,
+  e: { deltaX: number; deltaY: number; timeStamp: number }
+): -1 | 0 | 1 {
+  const fresh = e.timeStamp - wheel.lastTime > WHEEL_GAP_MS;
+  if (fresh) {
+    const ax = Math.abs(e.deltaX);
+    const ay = Math.abs(e.deltaY);
+    // Latch the axis only on a clear, dominant opening: noise or a
+    // diagonal first event must not pick the axis (and with it the
+    // direction) for the whole gesture. Deferring leaves lastTime
+    // untouched, so the next event may still open the gesture.
+    if (Math.max(ax, ay) < 3 || Math.max(ax, ay) < Math.min(ax, ay) * 1.5) return 0;
+    wheel.axis = ax > ay ? "x" : "y";
+  }
+  const delta = wheel.axis === "x" ? e.deltaX : e.deltaY;
+  const magnitude = Math.abs(delta);
+  if (magnitude < 2) return 0;
+
+  let starts = false;
+  if (fresh || Math.sign(delta) !== Math.sign(wheel.lastDelta)) {
+    starts = true;
+  } else if (wheel.decayed && magnitude > wheel.trough * 2 + 2) {
+    // Tested before the peak update: a second swipe ramping through the
+    // first one's tail must turn at its onset, not at its peak
+    starts = true;
+  } else if (magnitude > wheel.peak) {
+    wheel.peak = magnitude;
+  } else if (!wheel.decayed) {
+    if (magnitude < wheel.peak * 0.5) {
+      wheel.decayed = true;
+      wheel.trough = magnitude;
+    }
+  } else if (magnitude < wheel.trough) {
+    wheel.trough = magnitude;
+  }
+  if (starts) {
+    wheel.peak = magnitude;
+    wheel.trough = magnitude;
+    wheel.decayed = false;
+  }
+  wheel.lastTime = e.timeStamp;
+  wheel.lastDelta = delta;
+  return starts ? (delta > 0 ? 1 : -1) : 0;
+}
+
+/** Ease the viewport to a page; a slide already running yields to it.
+ *  onHiddenLand reports a slide that finished against a 0-width (hidden)
+ *  viewport and so could not move it — the un-hide restore aims there. */
+function slideViewportToPage(
+  el: HTMLElement,
+  wheel: WheelState,
+  target: number,
+  onHiddenLand: (target: number) => void
+): void {
+  wheel.target = target;
+  const id = ++wheel.slideId;
+  void animateViewportTo(el, target * el.clientWidth, () => wheel.slideId !== id).then(() => {
+    if (wheel.slideId !== id) return;
+    wheel.target = null;
+    if (el.clientWidth === 0) onHiddenLand(target);
+  });
+}
+
+/** Abandon the gesture and any slide in flight */
+function cancelWheelGesture(wheel: WheelState): void {
+  wheel.lastTime = 0;
+  wheel.target = null;
+  wheel.slideId += 1;
 }
 
 interface PagedGridProps {
@@ -288,8 +403,9 @@ function Page({
 }
 
 /**
- * Launchpad-style paged layout: full-width pages snapped horizontally,
- * each holding the items arranged on it (packed from the first slot,
+ * Launchpad-style paged layout: full-width pages slid horizontally by
+ * wheel gestures on either axis, the dots and drag flips (never natively
+ * scrolled), each holding the items arranged on it (packed from the first slot,
  * possibly sparse) up to as many whole rows as the viewport fits —
  * overflow cascades onto the next page. Each page runs its own drag
  * engine with the main grid's shared behavior (reorder, folder creation,
@@ -391,8 +507,10 @@ export function PagedGrid({
   useLayoutEffect(() => {
     if (wasHiddenRef.current && !hidden) {
       const el = viewportRef.current;
-      // "instant" overrides the viewport's scroll-smooth
-      el?.scrollTo({ left: page * el.clientWidth, behavior: "instant" });
+      // Instant: the page was already there before the hide — or a slide
+      // was still heading to it when the hide interrupted
+      const target = wheelRef.current.target ?? page;
+      el?.scrollTo({ left: target * el.clientWidth, behavior: "instant" });
     }
     wasHiddenRef.current = hidden;
   }, [hidden, page]);
@@ -478,6 +596,7 @@ export function PagedGrid({
       endDrag();
       return;
     }
+    cancelWheel(); // nothing may move the viewport under a drag
     dragOwnerRef.current = pageIndex;
     setIsPageDragging(true);
     onDragStateChange(drag);
@@ -638,33 +757,90 @@ export function PagedGrid({
   function goToPage(index: number) {
     if (isPageDragging) return;
     const el = viewportRef.current;
-    el?.scrollTo({ left: index * el.clientWidth });
+    if (el) slideToPage(el, index);
   }
+
+  // Wheel input on either axis turns pages, eased by the same slide the
+  // drag flip uses; the viewport never scrolls natively, so a gesture's
+  // remaining events can't interrupt the slide the way they would a
+  // native smooth scroll. Turns chain, each from the page the running
+  // slide is heading to. The gesture reading itself lives in
+  // readWheelTurn.
+  const wheelRef = useRef<WheelState>({
+    axis: "y",
+    lastTime: 0,
+    lastDelta: 0,
+    peak: 0,
+    trough: 0,
+    decayed: false,
+    target: null,
+    slideId: 0,
+  });
+  useEffect(() => {
+    const wheel = wheelRef.current;
+    // Unmount only needs to stop a slide in flight (its frames would keep
+    // scrolling a dead node)
+    return () => {
+      wheel.slideId += 1;
+    };
+  }, []);
+
+  function cancelWheel() {
+    cancelWheelGesture(wheelRef.current);
+  }
+
+  function slideToPage(el: HTMLElement, target: number) {
+    slideViewportToPage(el, wheelRef.current, target, setPage);
+  }
+
+  function handleWheel(e: React.WheelEvent<HTMLDivElement>) {
+    if (isPageDragging) return;
+    const el = viewportRef.current;
+    if (!el) return;
+    const wheel = wheelRef.current;
+    const direction = readWheelTurn(wheel, e);
+    if (direction === 0) return;
+    const from = wheel.target ?? page;
+    const target = Math.min(Math.max(from + direction, 0), pages.length - 1);
+    if (target !== from) slideToPage(el, target);
+  }
+
+  // Keyboard selection: the nav walks the flat order, so a step can cross
+  // onto another page — slide there. (scrollIntoView must not touch this
+  // container, see data-paged-viewport: its minimal scroll would drag the
+  // viewport off page boundaries.)
+  const showSelectionRef = useLatestRef((selected: string) => {
+    const el = viewportRef.current;
+    if (!el || el.clientWidth === 0) return;
+    const index = pages.findIndex((ids) => ids.includes(selected));
+    const shown = wheelRef.current.target ?? Math.round(el.scrollLeft / el.clientWidth);
+    if (index !== -1 && index !== shown) slideToPage(el, index);
+  });
+  useEffect(() => {
+    if (selectedId !== null) showSelectionRef.current(selectedId);
+  }, [selectedId, showSelectionRef]);
 
   return (
     <div className={cn("flex-1 min-h-0 flex flex-col", hidden && "hidden")}>
       <div
         ref={viewportRef}
+        data-paged-viewport=""
+        onWheel={handleWheel}
         onScroll={(e) => {
           const el = e.currentTarget;
           // Hidden layouts fire spurious scrolls with a 0 width
           if (el.clientWidth === 0) return;
           setPage(Math.round(el.scrollLeft / el.clientWidth));
         }}
-        className={cn(
-          "flex-1 min-h-0 flex overflow-y-hidden scroll-smooth [&::-webkit-scrollbar]:hidden",
-          // Mid-drag the cached item rects live in the drag-start frame: a
-          // user-initiated horizontal scroll would silently shift them, so
-          // scrolling is locked while a page drag is active. Snapping is
-          // suspended with it — mandatory snap re-snaps every frame of the
-          // flip's rAF slide to a page boundary, collapsing the animation
-          // into a jump. The flip targets an exact boundary, so snapping
-          // resumes on a snap point when the drag ends.
-          isPageDragging ? "overflow-x-hidden snap-none" : "overflow-x-auto snap-x snap-mandatory"
-        )}
+        // Never natively scrollable: every page move is a programmatic
+        // eased slide (wheel gestures, the dots, drag flips), so no user
+        // scroll can shift the cached item rects of a drag's start frame,
+        // and no scroll snapping exists to re-snap a slide's frames into
+        // a jump
+        className="flex-1 min-h-0 flex overflow-hidden"
       >
         {pageItemLists.map((pageItems, index) => (
-          <div key={index} className="w-full shrink-0 snap-center">
+          <div key={index} className="w-full shrink-0">
             <Page
               pageItems={pageItems}
               pageIndex={index}

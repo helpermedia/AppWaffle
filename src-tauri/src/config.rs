@@ -49,8 +49,8 @@ pub struct OrderConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum LayoutMode {
-    #[default]
     Scroll,
+    #[default]
     Paged,
 }
 
